@@ -1,7 +1,7 @@
-﻿/**
+/**
  * SchoolOnboarding.controller.js
  *
- * Public-facing APIs � school khud register kar sake.
+ * Public-facing APIs ? school khud register kar sake.
  *
  * NEW 2-STEP FLOW:
  *  POST /onboarding/check-subdomain   ? Subdomain availability check
@@ -123,7 +123,7 @@ const calculatePrice = (plan, committedStudents = 0, billingCycle = "Monthly") =
 };
 
 // -------------------------------------------------------------
-// NEW FLOW � STEP 0: Check subdomain availability
+// NEW FLOW ? STEP 0: Check subdomain availability
 // POST /onboarding/check-subdomain
 // -------------------------------------------------------------
 export const checkSubdomain = asyncHandler(async (req, res) => {
@@ -141,7 +141,7 @@ export const checkSubdomain = asyncHandler(async (req, res) => {
 
     const existingTenant = await Tenant.findOne({ subdomain: clean });
 
-    // LEAD status registrations expire after 24 hours — don't block others indefinitely
+    // LEAD status registrations expire after 24 hours � don't block others indefinitely
     const LEAD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
     const existingReg    = await SchoolRegistration.findOne({
         subdomain: clean,
@@ -166,7 +166,7 @@ export const checkSubdomain = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// NEW FLOW � STEP 1: Create Lead + Send OTP
+// NEW FLOW ? STEP 1: Create Lead + Send OTP
 // POST /onboarding/create-lead
 // Body: { subdomain, contactName, mobileNo, whatsappNo, email }
 // -------------------------------------------------------------
@@ -191,11 +191,11 @@ export const createLead = asyncHandler(async (req, res) => {
         return res.status(400).json(new apiResponse(400, null, "Please enter a valid 10-digit mobile number"));
     }
 
-    // Subdomain already taken? (exclude same email ki registrations � upsert handle karega)
+    // Subdomain already taken? (exclude same email ki registrations ? upsert handle karega)
     const subdomainTaken = await Tenant.findOne({ subdomain: cleanSubdomain }) ||
         await SchoolRegistration.findOne({
             subdomain: cleanSubdomain,
-            schoolEmail: { $ne: email.toLowerCase().trim() },   // ignore registrations from the same email � upsert will handle it
+            schoolEmail: { $ne: email.toLowerCase().trim() },   // ignore registrations from the same email ? upsert will handle it
             status: { $in: ["LEAD", "VERIFIED", "PAYMENT_PENDING", "COMPLETED"] },
         });
 
@@ -221,7 +221,7 @@ export const createLead = asyncHandler(async (req, res) => {
 
     // Upsert logic:
     // - PENDING_VERIFICATION: OTP nahi hua, update karo
-    // - LEAD: OTP ho chuka, lekin school info pending � update karo (user ne data change kiya)
+    // - LEAD: OTP ho chuka, lekin school info pending ? update karo (user ne data change kiya)
     // - COMPLETED: block (upar check ho chuka)
     const existing = await SchoolRegistration.findOne({
         schoolEmail: email.toLowerCase().trim(),
@@ -249,7 +249,7 @@ export const createLead = asyncHandler(async (req, res) => {
             schoolContact:   mobileNo.replace(/\D/g, ""),
             mobileNo:        mobileNo.replace(/\D/g, ""),
             whatsappNo:      (whatsappNo || mobileNo).replace(/\D/g, ""),
-            // schoolName required � temp value, will be updated in Step 2
+            // schoolName required ? temp value, will be updated in Step 2
             schoolName:      contactName,
             source:          "website",
             otp,
@@ -274,7 +274,7 @@ export const createLead = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// NEW FLOW � STEP 1c: Resend OTP (by registrationId)
+// NEW FLOW ? STEP 1c: Resend OTP (by registrationId)
 // POST /onboarding/resend-otp
 // Body: { registrationId }
 // -------------------------------------------------------------
@@ -326,7 +326,7 @@ export const resendLeadOtp = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// NEW FLOW � STEP 1b: Verify Lead OTP ? mark as LEAD
+// NEW FLOW ? STEP 1b: Verify Lead OTP ? mark as LEAD
 // POST /onboarding/verify-lead-otp
 // Body: { registrationId, otp }
 // -------------------------------------------------------------
@@ -357,14 +357,14 @@ export const verifyLeadOtp = asyncHandler(async (req, res) => {
         return res.status(400).json(new apiResponse(400, null, "OTP has expired. Please request a new one."));
     }
 
-    // Mark as LEAD � OTP verified, school info pending
+    // Mark as LEAD ? OTP verified, school info pending
     registration.otp             = undefined;
     registration.otpExpiry       = undefined;
     registration.isEmailVerified = true;
     registration.status          = "LEAD";
     await registration.save();
 
-    // Notify marketing team — fire-and-forget (never blocks the response)
+    // Notify marketing team � fire-and-forget (never blocks the response)
     sendLeadNotification({
         contactName:    registration.contactName || registration.schoolName,
         email:          registration.schoolEmail,
@@ -381,7 +381,7 @@ export const verifyLeadOtp = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// NEW FLOW � STEP 2: Create School from Lead
+// NEW FLOW ? STEP 2: Create School from Lead
 // POST /onboarding/create-school
 // Body: { registrationId, schoolName, schoolAddress, logo, affiliationBoard, subdomain? }
 // -------------------------------------------------------------
@@ -442,7 +442,7 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
         subdomain = `${registration.subdomain || schoolName.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 15)}${++attempt}`;
     }
 
-    const dbUri = `${process.env.BASE_DB_URI}/${subdomain}`;
+    const dbUri = `${process.env.BASE_DB_URI.replace(/\/$/, "")}/${subdomain}`;
 
     // -- Create Tenant -----------------------------------------
     const tenant = await Tenant.create({
@@ -518,7 +518,7 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
                 .sort({ createdAt: -1 })
                 .lean();
         }
-    } catch (_) { /* ignore — no trial will be assigned */ }
+    } catch (_) { /* ignore � no trial will be assigned */ }
 
     let trialEndDate = null;
     let TRIAL_DAYS   = 0;
@@ -563,9 +563,9 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
                     },
                 ],
             });
-            console.log(`✅ ${TRIAL_DAYS}-day trial activated for tenant: ${subdomain} | Package: "${trialPackage.name}" | Limit: ${TRIAL_STUDENT_LIMIT} students`);
+            console.log(`? ${TRIAL_DAYS}-day trial activated for tenant: ${subdomain} | Package: "${trialPackage.name}" | Limit: ${TRIAL_STUDENT_LIMIT} students`);
         } else {
-            // No active trial package configured → create subscription in PENDING state
+            // No active trial package configured ? create subscription in PENDING state
             // Admin will assign a plan manually later
             await TenantSubscription.create({
                 tenantId:          tenant._id,
@@ -575,11 +575,11 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
                 status:            "PENDING",
                 history:           [],
             });
-            console.warn(`⚠️  No active free trial package found. Tenant "${subdomain}" created with PENDING subscription. Admin must assign a plan.`);
+            console.warn(`??  No active free trial package found. Tenant "${subdomain}" created with PENDING subscription. Admin must assign a plan.`);
         }
     } catch (subErr) {
-        // Trial/subscription create fail — school creation should NOT be blocked
-        console.error("⚠️  Subscription create failed (non-fatal):", subErr.message);
+        // Trial/subscription create fail � school creation should NOT be blocked
+        console.error("??  Subscription create failed (non-fatal):", subErr.message);
     }
 
     // -- Update Registration to COMPLETED ---------------------
@@ -608,9 +608,9 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
             adminPassword,
         });
         emailSent = true;
-        console.log(`✅ Credentials email sent to ${registration.schoolEmail}`);
+        console.log(`? Credentials email sent to ${registration.schoolEmail}`);
     } catch (emailErr) {
-        console.error("❌ Credentials email FAILED:", emailErr.message);
+        console.error("? Credentials email FAILED:", emailErr.message);
         console.error("   EMAIL_USER:", process.env.EMAIL_USER);
         console.error("   EMAIL_PASS set:", !!process.env.EMAIL_PASS);
     }
@@ -644,7 +644,7 @@ export const createSchoolFromLead = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 1 � Register School (send OTP) [LEGACY]
+// STEP 1 ? Register School (send OTP) [LEGACY]
 // -------------------------------------------------------------
 export const registerSchool = asyncHandler(async (req, res) => {
     const {
@@ -773,7 +773,7 @@ export const registerSchool = asyncHandler(async (req, res) => {
         });
     } catch (emailErr) {
         console.error("?? OTP email failed (non-fatal):", emailErr.message);
-        // Do not block registration if email fails � OTP is still saved in DB
+        // Do not block registration if email fails ? OTP is still saved in DB
         // Admin can resend manually or user can request resend
     }
 
@@ -787,7 +787,7 @@ export const registerSchool = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 2 � Verify OTP
+// STEP 2 ? Verify OTP
 // -------------------------------------------------------------
 export const verifyOtp = asyncHandler(async (req, res) => {
     const { registrationId, otp } = req.body;
@@ -837,7 +837,7 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 3 � Get Public Plans (for pricing page)
+// STEP 3 ? Get Public Plans (for pricing page)
 // -------------------------------------------------------------
 export const getPublicPlans = asyncHandler(async (req, res) => {
     const plans = await SubscriptionPlan.find({
@@ -856,7 +856,7 @@ export const getPublicPlans = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 3b � Calculate Price (before order creation)
+// STEP 3b ? Calculate Price (before order creation)
 // -------------------------------------------------------------
 export const calculatePlanPrice = asyncHandler(async (req, res) => {
     const { planId, committedStudents = 0, billingCycle = "Monthly" } = req.body;
@@ -898,7 +898,7 @@ export const calculatePlanPrice = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 4 � Create Razorpay Order
+// STEP 4 ? Create Razorpay Order
 // -------------------------------------------------------------
 export const createOnboardingOrder = asyncHandler(async (req, res) => {
     const { registrationId, planId, committedStudents = 0, billingCycle: billingCycleBody, billing } = req.body;
@@ -910,7 +910,7 @@ export const createOnboardingOrder = asyncHandler(async (req, res) => {
             .json(new apiResponse(400, null, "registrationId & planId required"));
     }
 
-    // Check Razorpay keys early � give clear error instead of crashing
+    // Check Razorpay keys early ? give clear error instead of crashing
     if (!process.env.RAZORPAY_KEY || process.env.RAZORPAY_KEY === "your_key" ||
         !process.env.RAZORPAY_SECRET || process.env.RAZORPAY_SECRET === "your_secret") {
         return res
@@ -990,7 +990,7 @@ export const createOnboardingOrder = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 5 � Verify Payment + Auto-Create Tenant
+// STEP 5 ? Verify Payment + Auto-Create Tenant
 // -------------------------------------------------------------
 export const verifyOnboardingPayment = asyncHandler(async (req, res) => {
     const {
@@ -1050,7 +1050,7 @@ export const verifyOnboardingPayment = asyncHandler(async (req, res) => {
     }
 
     // -- Create Tenant -------------------------------------
-    const dbUri = `${process.env.BASE_DB_URI}/${subdomain}`;
+    const dbUri = `${process.env.BASE_DB_URI.replace(/\/$/, "")}/${subdomain}`;
 
     const tenant = await Tenant.create({
         schoolName: registration.schoolName,
@@ -1202,7 +1202,7 @@ export const verifyOnboardingPayment = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// STEP 4 (Alt) � Start Free Trial (no payment)
+// STEP 4 (Alt) ? Start Free Trial (no payment)
 // -------------------------------------------------------------
 export const startTrial = asyncHandler(async (req, res) => {
     const { registrationId, planId } = req.body;
@@ -1249,7 +1249,7 @@ export const startTrial = asyncHandler(async (req, res) => {
         subdomain = generateSubdomain(registration.schoolName) + (++attempt);
     }
 
-    const dbUri = `${process.env.BASE_DB_URI}/${subdomain}`;
+    const dbUri = `${process.env.BASE_DB_URI.replace(/\/$/, "")}/${subdomain}`;
 
     // -- Create Tenant -------------------------------------
     const tenant = await Tenant.create({
@@ -1316,7 +1316,7 @@ export const startTrial = asyncHandler(async (req, res) => {
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + plan.trialDays);
 
-    // studentLimit > 0 → use plan's limit; 0 → fallback to 350 (prevent unlimited trial)
+    // studentLimit > 0 ? use plan's limit; 0 ? fallback to 350 (prevent unlimited trial)
     const trialStudentLimit = plan.studentLimit > 0 ? plan.studentLimit : 350;
 
     await TenantSubscription.create({
@@ -1390,7 +1390,7 @@ export const startTrial = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// NEW FLOW � Register Free (no plan, no payment)
+// NEW FLOW ? Register Free (no plan, no payment)
 // POST /onboarding/register-free
 // Body: { registrationId }
 // OTP must be verified first (via verify-otp endpoint)
@@ -1414,7 +1414,7 @@ export const registerFree = asyncHandler(async (req, res) => {
     }
 
     if (registration.status === "COMPLETED") {
-        // Already created � credentials email bhej do dobara
+        // Already created ? credentials email bhej do dobara
         const existingTenant = await Tenant.findOne({ schoolEmail: registration.schoolEmail });
         if (existingTenant) {
             return res.status(200).json(
@@ -1437,7 +1437,7 @@ export const registerFree = asyncHandler(async (req, res) => {
         subdomain = generateSubdomain(registration.schoolName) + (++attempt);
     }
 
-    const dbUri = `${process.env.BASE_DB_URI}/${subdomain}`;
+    const dbUri = `${process.env.BASE_DB_URI.replace(/\/$/, "")}/${subdomain}`;
 
     // -- Create Tenant -------------------------------------
     const tenant = await Tenant.create({
@@ -1538,7 +1538,7 @@ export const registerFree = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// PUBLIC � My Plan: Step 1 � Email se OTP bhejo
+// PUBLIC ? My Plan: Step 1 ? Email se OTP bhejo
 // -------------------------------------------------------------
 export const sendMyPlanOtp = asyncHandler(async (req, res) => {
     const { email } = req.body;
@@ -1575,7 +1575,7 @@ export const sendMyPlanOtp = asyncHandler(async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// PUBLIC � My Plan: Step 2 � Verify OTP and return plan details
+// PUBLIC ? My Plan: Step 2 ? Verify OTP and return plan details
 // -------------------------------------------------------------
 export const getMyPlan = asyncHandler(async (req, res) => {
     const { email, otp } = req.body;
@@ -1643,10 +1643,10 @@ export const getMyPlan = asyncHandler(async (req, res) => {
                 tenantId:  tenant._id,   // installment fetch ke liye
             },
             plan: {
-                name:          subscription.currentPlan?.name                    || "�",
+                name:          subscription.currentPlan?.name                    || "?",
                 description:   subscription.currentPlan?.planId?.description     || null,
                 features:      subscription.currentPlan?.planId?.features         || [],
-                billingCycle:  subscription.currentPlan?.billingCycle             || "�",
+                billingCycle:  subscription.currentPlan?.billingCycle             || "?",
                 price:         subscription.currentPlan?.price                   || 0,
                 // If totalStudentLimit is 0 (legacy/misconfigured trial), resolve properly:
                 // 1. Use plan-level studentLimit if > 0
