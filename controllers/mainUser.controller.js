@@ -91,7 +91,9 @@ export const loginUser = asyncHandler(async (req, res) => {
     // ===============================
     // 🔍 FIND USER
     // ===============================
+    console.log("🔍 LOGIN ATTEMPT — userId:", JSON.stringify(userId), "| password:", JSON.stringify(password));
     const user = await User.findOne({ userId }).populate("tenantId", "schoolName logo subdomain");
+    console.log("🔍 USER FOUND:", user ? `YES — stored password: ${JSON.stringify(user.password)}` : "NO");
 
     if (!user) {
         return res
