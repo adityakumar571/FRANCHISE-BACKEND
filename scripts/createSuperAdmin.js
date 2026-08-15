@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 
 // Development DB use karo (jahan actual server connect hota hai)
-dotenv.config({ path: '.env.development' });
+dotenv.config({ path: '.env' });
 
 // ── User Schema (inline) ──────────────────────────────────────────────────────
 const UserSchema = new mongoose.Schema(
