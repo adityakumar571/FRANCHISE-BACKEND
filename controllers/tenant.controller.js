@@ -589,3 +589,55 @@ export const toggleTenantStatus = asyncHandler(async (req, res) => {
         )
     );
 });
+
+// ─────────────────────────────────────────────────────────────
+// Login As Tenant User (Admin / SuperAdmin)
+// POST /api/schools/:id/login-as
+// Body: { role: "Admin" | "SuperAdmin" }
+// Returns: { token, user, subdomain, tenantName }
+// ─────────────────────────────────────────────────────────────
+export const loginAsTenantUser = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { role = "Admin" } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
+    }
+
+    const tenant = await Tenant.findById(id);
+    if (!tenant) {
+        return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
+    }
+
+    if (!tenant.isActive) {
+        return res.status(403).json(new apiResponse(403, null, "Tenant is inactive"));
+    }
+
+    // Connect to tenant DB and find the user
+    const tenantDB = await getTenantDB(tenant.dbUri);
+    const User = getUserModel(tenantDB);
+
+    const targetRole = ["Admin", "SuperAdmin"].includes(role) ? role : "Admin";
+    const user = await User.findOne({ role: targetRole });
+
+    if (!user) {
+        return res.status(404).json(new apiResponse(404, null, `No ${targetRole} found for this franchise`));
+    }
+
+    // Generate JWT token for this tenant user
+    const token = user.generateAuthToken();
+
+    return res.status(200).json(
+        new apiResponse(200, {
+            token,
+            user: {
+                _id:    user._id,
+                userId: user.userId,
+                name:   user.name,
+                role:   user.role,
+            },
+            subdomain:  tenant.subdomain,
+            tenantName: tenant.schoolName,
+        }, `Logged in as ${targetRole} of ${tenant.schoolName} ✅`)
+    );
+});
