@@ -189,8 +189,6 @@ app.use("/api/faq",             faqRoutes);       /* <- FAQ management (main DB,
 app.use("/api/contact",         contactRoutes);   /* <- Website contact form (public) */
 app.use("/api/newsletter",      newsletterRoutes); /* <- Newsletter subscription (public) */
 app.use("/api/site-settings",   siteSettingsRoutes); /* <- Site contact info (public GET, admin PUT) */
-
-/* ================= SUBSCRIPTION ADMIN ROUTES ================= */
 app.use("/api/subscription",         subscriptionRoutes);
 app.use("/api/free-trial-packages",  freeTrialPackageRoutes);
 app.use("/api/session-billing",      sessionBillingRoutes);
@@ -262,6 +260,11 @@ app.get("/api/subscription-status", async (req, res) => {
 
 /* ================= TENANT AUTH ================= */
 app.use("/api/auth", tenantAuthRoutes);
+
+/* ================= FRANCHISE LOGIN (needs tenant context from middleware) ================= */
+/* POST /api/franchise/login  — Body: { userId, password }, Header: x-tenant-id: <subdomain> */
+import { franchiseLogin } from "./controllers/tenant.controller.js";
+app.post("/api/franchise/login", franchiseLogin);
 
 /* Tenant's own subscription info */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);

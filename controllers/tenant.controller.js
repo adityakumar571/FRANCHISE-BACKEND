@@ -42,13 +42,25 @@ export const registerTenant = asyncHandler(async (req, res) => {
         description,
         razorpayKey,
         razorpaySecret,
-            affiliationLine,
-    schoolMedium,
-    msmeRegNo,
-    isoRegNo,
-    regInfo,
-    nitiAayog,
-    managedBy,
+        affiliationLine,
+        schoolMedium,
+        msmeRegNo,
+        isoRegNo,
+        regInfo,
+        nitiAayog,
+        managedBy,
+        // ── Franchise-specific fields ──
+        franchiseCode,
+        businessType,
+        gstNo,
+        franchiseAdminName,
+        franchiseAdminEmail,
+        franchiseAdminPhone,
+        addressLine1,
+        city,
+        state,
+        country,
+        pincode,
     } = req.body;
 
     if (!schoolName || !subdomain) {
@@ -94,13 +106,25 @@ export const registerTenant = asyncHandler(async (req, res) => {
         description,
         razorpayKey,
         razorpaySecret,
-            affiliationLine,
-    schoolMedium,
-    msmeRegNo,
-    isoRegNo,
-    regInfo,
-    nitiAayog,
-    managedBy,
+        affiliationLine,
+        schoolMedium,
+        msmeRegNo,
+        isoRegNo,
+        regInfo,
+        nitiAayog,
+        managedBy,
+        // franchise fields
+        ...(franchiseCode      && { franchiseCode }),
+        ...(businessType       && { businessType }),
+        ...(gstNo              && { gstNo }),
+        ...(franchiseAdminName  && { franchiseAdminName }),
+        ...(franchiseAdminEmail && { franchiseAdminEmail }),
+        ...(franchiseAdminPhone && { franchiseAdminPhone }),
+        ...(addressLine1       && { addressLine1 }),
+        ...(city               && { city }),
+        ...(state              && { state }),
+        ...(country            && { country }),
+        ...(pincode            && { pincode }),
     });
 
     // ===============================
@@ -639,5 +663,79 @@ export const loginAsTenantUser = asyncHandler(async (req, res) => {
             subdomain:  tenant.subdomain,
             tenantName: tenant.schoolName,
         }, `Logged in as ${targetRole} of ${tenant.schoolName} ✅`)
+    );
+});
+
+// ─────────────────────────────────────────────────────────────
+// Franchise Direct Login
+// POST /api/franchise/login
+// Body: { userId, password }
+// Header: x-tenant-id: <subdomain>
+// Returns: { token, user, franchise }
+// Called from: Franchise Admin Login page
+// ─────────────────────────────────────────────────────────────
+export const franchiseLogin = asyncHandler(async (req, res) => {
+    const { userId, password } = req.body;
+
+    if (!userId || !password) {
+        return res.status(400).json(new apiResponse(400, null, "userId and password are required"));
+    }
+
+    // Tenant must be identified by tenantMiddleware via x-tenant-id header
+    if (!req.tenant) {
+        return res.status(400).json(new apiResponse(400, null, "Franchise not identified. Send x-tenant-id header."));
+    }
+
+    const tenant = req.tenant;
+
+    if (!tenant.isActive) {
+        return res.status(403).json(new apiResponse(403, null, "This franchise account is inactive."));
+    }
+
+    // Connect to tenant DB
+    if (!req.db) {
+        return res.status(500).json(new apiResponse(500, null, "Franchise database unavailable."));
+    }
+
+    const User = getUserModel(req.db);
+    const user = await User.findOne({ userId });
+
+    if (!user) {
+        return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    }
+
+    // Password check (plain text comparison — existing system pattern)
+    if (user.password !== password) {
+        return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    }
+
+    if (!user.isActive) {
+        return res.status(403).json(new apiResponse(403, null, "Your account is inactive."));
+    }
+
+    // Generate token with franchise context
+    const token = user.generateAuthToken();
+
+    // Update lastLogin
+    user.lastLogin = new Date();
+    await user.save();
+
+    return res.status(200).json(
+        new apiResponse(200, {
+            token,
+            user: {
+                _id:    user._id,
+                userId: user.userId,
+                name:   user.name,
+                role:   user.role,
+            },
+            franchise: {
+                _id:          tenant._id,
+                franchiseName: tenant.schoolName,
+                franchiseCode: tenant.franchiseCode || tenant.schoolCode,
+                subdomain:    tenant.subdomain,
+                logo:         tenant.logo,
+            },
+        }, "Franchise login successful ✅")
     );
 });

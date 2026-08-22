@@ -13,6 +13,40 @@ const tenantSchema = new mongoose.Schema(
 
         dbUri: String,
 
+        // ── Franchise Fields ─────────────────────────────────────
+        franchiseCode: {
+            type: String,
+            unique: true,
+            sparse: true,
+        },
+        businessType: {
+            type: String,
+            enum: ["Pharmacy", "Medical Store", "Clinic", "Hospital", "Other"],
+        },
+        gstNo: {
+            type: String,
+        },
+
+        // Franchise Admin Info (stored for display in Super Admin)
+        franchiseAdminName: {
+            type: String,
+        },
+        franchiseAdminEmail: {
+            type: String,
+            trim: true,
+            lowercase: true,
+        },
+        franchiseAdminPhone: {
+            type: String,
+        },
+
+        // Account status (extended)
+        accountStatus: {
+            type: String,
+            enum: ["Active", "Inactive", "Suspended", "Pending"],
+            default: "Active",
+        },
+
         // ── Portal Login ─────────────────────────────────────────
         portalPassword: {
             type: String,   // bcrypt hashed
