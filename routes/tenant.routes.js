@@ -7,6 +7,7 @@ import {
     toggleTenantStatus,
     updateTenant,
     loginAsTenantUser,
+    franchiseLogin,
 } from "../controllers/tenant.controller.js";
 
 const router = express.Router();
