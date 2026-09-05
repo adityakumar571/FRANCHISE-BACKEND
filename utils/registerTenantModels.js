@@ -45,6 +45,29 @@ import { getBannerModel } from "../models/tenant/HomeBanner.model.js";
 import { getCategoryModel } from "../models/tenant/Category.model.js";
 import { getTestimonialsModel } from "../models/tenant/Testimonials.model.js";
 
+// ── Franchise Pharmacy Models ─────────────────────────────────────────────────
+import { getMedicineModel }             from "../models/tenant/franchise/Medicine.model.js";
+import { getMedicineBatchModel }        from "../models/tenant/franchise/MedicineBatch.model.js";
+import { getSupplierModel }             from "../models/tenant/franchise/Supplier.model.js";
+import { getSaleInvoiceModel }          from "../models/tenant/franchise/SaleInvoice.model.js";
+import { getPurchaseInvoiceModel }      from "../models/tenant/franchise/PurchaseInvoice.model.js";
+import { getCustomerModel }             from "../models/tenant/franchise/Customer.model.js";
+import { getHoldBillModel }             from "../models/tenant/franchise/HoldBill.model.js";
+import { getDayClosingModel }           from "../models/tenant/franchise/DayClosing.model.js";
+import { getPurchaseOrderModel }        from "../models/tenant/franchise/PurchaseOrder.model.js";
+import { getGRNModel }                  from "../models/tenant/franchise/GRN.model.js";
+import { getPurchaseReturnModel }       from "../models/tenant/franchise/PurchaseReturn.model.js";
+import { getStockAdjustmentModel }      from "../models/tenant/franchise/StockAdjustment.model.js";
+import { getRackModel }                 from "../models/tenant/franchise/Rack.model.js";
+import { getInventoryAuditModel }       from "../models/tenant/franchise/InventoryAudit.model.js";
+import { getLiveWholesaleRateModel }    from "../models/tenant/franchise/LiveWholesaleRate.model.js";
+import { getLiveOrderModel }            from "../models/tenant/franchise/LiveOrder.model.js";
+import { getFranchiseStaffModel }       from "../models/tenant/franchise/FranchiseStaff.model.js";
+import { getB2BOrderModel }             from "../models/tenant/franchise/B2BOrder.model.js";
+import { getFranchiseSettingsModel }    from "../models/tenant/franchise/FranchiseSettings.model.js";
+import { getSupportTicketModel }        from "../models/tenant/franchise/SupportTicket.model.js";
+import { getFranchiseAuditLogModel }    from "../models/tenant/franchise/FranchiseAuditLog.model.js";
+
 // ── HR Module Models ──────────────────────────────────────────────────────────
 import { getDepartmentModel }      from "../models/tenant/hr/Department.model.js";
 import { getDesignationModel }     from "../models/tenant/hr/Designation.model.js";
@@ -100,6 +123,29 @@ export const registerTenantModels = (db) => {
     getBannerModel(db);
     getCategoryModel(db);
     getTestimonialsModel(db);
+
+    // ── Franchise Pharmacy Models ─────────────────────────────────────────────
+    getMedicineModel(db);
+    getMedicineBatchModel(db);
+    getSupplierModel(db);
+    getSaleInvoiceModel(db);
+    getPurchaseInvoiceModel(db);
+    getCustomerModel(db);
+    getHoldBillModel(db);
+    getDayClosingModel(db);
+    getPurchaseOrderModel(db);
+    getGRNModel(db);
+    getPurchaseReturnModel(db);
+    getStockAdjustmentModel(db);
+    getRackModel(db);
+    getInventoryAuditModel(db);
+    getLiveWholesaleRateModel(db);
+    getLiveOrderModel(db);
+    getFranchiseStaffModel(db);
+    getB2BOrderModel(db);
+    getFranchiseSettingsModel(db);
+    getSupportTicketModel(db);
+    getFranchiseAuditLogModel(db);
 
     // ── HR Module ─────────────────────────────────────────────
     getDepartmentModel(db);
