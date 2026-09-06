@@ -5,51 +5,22 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { getTenantDB } from "../utils/dbManager.js";
 import { getUserModel } from "../models/tenant/user.model.js";
-import { getSessionModel } from "../models/tenant/master/Session.model.js";
 import mongoose from "mongoose";
-import { getTeacherModel } from "../models/tenant/teacher/Teacher.model.js";
-import { getSectionModel } from "../models/tenant/master/Section.modal.js";
-import { getStudentEnrolmentModel } from "../models/tenant/student/StudentEnrolment.model.js";
-import { getClassModel } from "../models/tenant/master/Class.modal.js";
-import { setupDefaultMasters }
-    from "../utils/setupDefaultMasters.js";
-import { sendSchoolCredentials }
-    from "../utils/sendSchoolCredentials.js";
-const getCurrentSession = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0 = Jan, 3 = April
+import { mailer } from "../utils/mailer.js";
 
-    if (month >= 3) {
-        return `${year}-${year + 1}`;
-    } else {
-        return `${year - 1}-${year}`;
-    }
-};
-
+/* ─────────────────────────────────────────────────────────────
+   POST /api/schools  — Register a new franchise tenant
+───────────────────────────────────────────────────────────── */
 export const registerTenant = asyncHandler(async (req, res) => {
     const {
-        schoolName,
+        schoolName,       // franchiseName stored as schoolName for compatibility
         subdomain,
-        schoolCode,
         schoolEmail,
-        estNo,
-        schoolContactAlt,
-        schoolAddress,
         schoolContact,
         logo,
         dbUri,
         description,
-        razorpayKey,
-        razorpaySecret,
-        affiliationLine,
-        schoolMedium,
-        msmeRegNo,
-        isoRegNo,
-        regInfo,
-        nitiAayog,
-        managedBy,
-        // ── Franchise-specific fields ──
+        // Franchise-specific fields
         franchiseCode,
         businessType,
         gstNo,
@@ -64,208 +35,113 @@ export const registerTenant = asyncHandler(async (req, res) => {
     } = req.body;
 
     if (!schoolName || !subdomain) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "schoolName & subdomain required"));
+        return res.status(400).json(new apiResponse(400, null, "Franchise name & subdomain are required"));
     }
 
     const cleanSubdomain = subdomain.toLowerCase().trim();
 
-    // ===============================
-    // 🔥 CHECK SUBDOMAIN UNIQUE
-    // ===============================
     const exists = await Tenant.findOne({ subdomain: cleanSubdomain });
-
     if (exists) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "Subdomain already exists"));
+        return res.status(400).json(new apiResponse(400, null, "Subdomain already exists"));
     }
 
-    // ===============================
-    // 🔥 DB URI GENERATE
-    // ===============================
     const finalDbUri = dbUri
         ? dbUri
         : `${process.env.BASE_DB_URI.replace(/\/$/, '')}/${cleanSubdomain}`;
 
-    // ===============================
-    // ✅ CREATE TENANT
-    // ===============================
+    // Create tenant record
     const tenant = await Tenant.create({
         schoolName,
-        schoolCode,
         schoolEmail,
-        estNo,
-        schoolContactAlt,
-        schoolAddress,
         schoolContact,
         subdomain: cleanSubdomain,
         dbUri: finalDbUri,
         logo,
         description,
-        razorpayKey,
-        razorpaySecret,
-        affiliationLine,
-        schoolMedium,
-        msmeRegNo,
-        isoRegNo,
-        regInfo,
-        nitiAayog,
-        managedBy,
-        // franchise fields
-        ...(franchiseCode      && { franchiseCode }),
-        ...(businessType       && { businessType }),
-        ...(gstNo              && { gstNo }),
+        isActive: true,
+        ...(franchiseCode       && { franchiseCode }),
+        ...(businessType        && { businessType }),
+        ...(gstNo               && { gstNo }),
         ...(franchiseAdminName  && { franchiseAdminName }),
         ...(franchiseAdminEmail && { franchiseAdminEmail }),
         ...(franchiseAdminPhone && { franchiseAdminPhone }),
-        ...(addressLine1       && { addressLine1 }),
-        ...(city               && { city }),
-        ...(state              && { state }),
-        ...(country            && { country }),
-        ...(pincode            && { pincode }),
+        ...(addressLine1        && { addressLine1 }),
+        ...(city                && { city }),
+        ...(state               && { state }),
+        ...(country             && { country }),
+        ...(pincode             && { pincode }),
     });
 
-    // ===============================
-    // 🏢 CREATE TENANT DB CONNECTION
-    // ===============================
+    // Connect to tenant DB and create default admin users
     const tenantDB = await getTenantDB(finalDbUri);
-
     const User = getUserModel(tenantDB);
-    const Session = getSessionModel(tenantDB);
 
-    // ===============================
-    // 🔐 DEFAULT ADMIN
-    // ===============================
-    // const adminUserId = `superadmin_${cleanSubdomain}`;
-    // const adminPassword = "SuperAdmin@123"; 
-
-
-
-    // const admin = await User.create({
-    //     userId: adminUserId,
-    //     password: adminPassword,
-    //     role: "SuperAdmin",
-    //     name: "Super Admin",
-    //     isNew: false,
-    // });
-    // ===============================
-    // 🔐 SUPER ADMIN
-    // ===============================
-
-    const superAdminUserId =
-        `superadmin_${cleanSubdomain}`;
-
-    const superAdminPassword =
-        Math.random()
-            .toString(36)
-            .slice(-8);
+    const superAdminUserId = `superadmin_${cleanSubdomain}`;
+    const superAdminPassword = Math.random().toString(36).slice(-8);
+    const adminUserId = `admin_${cleanSubdomain}`;
+    const adminPassword = Math.random().toString(36).slice(-8);
 
     await User.create({
-
-        userId:
-            superAdminUserId,
-
-        password:
-            superAdminPassword,
-
-        role:
-            "SuperAdmin",
-
-        name:
-            "Super Admin",
-
+        userId: superAdminUserId,
+        password: superAdminPassword,
+        role: "SuperAdmin",
+        name: "Super Admin",
         isNew: false,
-
-    });
-
-    // ===============================
-    // 🔐 ADMIN
-    // ===============================
-
-    const adminUserId =
-        `admin_${cleanSubdomain}`;
-
-    const adminPassword =
-        Math.random()
-            .toString(36)
-            .slice(-8);
-
-    await User.create({
-
-        userId:
-            adminUserId,
-
-        password:
-            adminPassword,
-
-        role:
-            "Admin",
-
-        name:
-            "School Admin",
-
-        isNew: false,
-
-    });
-await sendSchoolCredentials({
-
-    to: schoolEmail,
-
-    schoolName,
-
-    schoolSubdomain: cleanSubdomain,
-
-    superAdminUserId,
-
-    superAdminPassword,
-
-    adminUserId,
-
-    adminPassword,
-
-});
-
-    const currentSession = getCurrentSession();
-
-    const newSession = await Session.create({
-        sessionName: currentSession,
-        isCurrent: true,
         isActive: true,
     });
 
-    await setupDefaultMasters(
-        tenantDB
-    );
+    await User.create({
+        userId: adminUserId,
+        password: adminPassword,
+        role: "Admin",
+        name: "Franchise Admin",
+        isNew: false,
+        isActive: true,
+    });
 
-    // ── Auto-assign Dynamic Free Trial subscription ──────────────
-    // Admin panel se configured default active trial package use karo.
-    const trialStart = new Date();
+    // Send credentials email
+    const emailTo = franchiseAdminEmail || schoolEmail;
+    if (emailTo) {
+        try {
+            await mailer({
+                to: emailTo,
+                subject: `Franchise Portal — Login Credentials for ${schoolName}`,
+                html: `
+                  <h2>Welcome to the Franchise Portal!</h2>
+                  <p>Your franchise <strong>${schoolName}</strong> has been registered.</p>
+                  <h3>Super Admin Credentials</h3>
+                  <p>User ID: <strong>${superAdminUserId}</strong><br/>Password: <strong>${superAdminPassword}</strong></p>
+                  <h3>Admin Credentials</h3>
+                  <p>User ID: <strong>${adminUserId}</strong><br/>Password: <strong>${adminPassword}</strong></p>
+                  <p>Login at: your franchise portal URL with subdomain <strong>${cleanSubdomain}</strong></p>
+                `,
+            });
+        } catch (emailErr) {
+            console.warn('[registerTenant] Email send failed:', emailErr.message);
+        }
+    }
+
+    // Auto-assign free trial subscription
     let trialPkg = null;
     try {
         trialPkg = await FreeTrialPackage.findOne({ isDefault: true, isActive: true }).lean();
         if (!trialPkg) {
             trialPkg = await FreeTrialPackage.findOne({ isActive: true }).sort({ createdAt: -1 }).lean();
         }
-    } catch (_) { /* fallback: no trial */ }
+    } catch (_) { /* no trial available */ }
 
-    const TRIAL_STUDENT_LIMIT = trialPkg ? trialPkg.studentLimit : 0;
-    const TRIAL_DAYS          = trialPkg ? trialPkg.durationDays : 0;
-    const trialEnd            = trialPkg ? (() => {
-        const d = new Date();
-        d.setDate(d.getDate() + TRIAL_DAYS);
-        return d;
-    })() : null;
+    if (trialPkg) {
+        const trialStart = new Date();
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + (trialPkg.durationDays || 0));
 
-    if (trialPkg && trialEnd) {
         await TenantSubscription.create({
             tenantId:          tenant._id,
             isTrial:           true,
             trialEndDate:      trialEnd,
             status:            "TRIAL",
             paidStatus:        "PAID",
-            totalStudentLimit: TRIAL_STUDENT_LIMIT,
+            totalStudentLimit: trialPkg.studentLimit || 0,
             usedStudents:      0,
             totalAmount:       0,
             usedTrialPackageIds: [trialPkg._id],
@@ -273,7 +149,7 @@ await sendSchoolCredentials({
                 name:         trialPkg.name,
                 price:        0,
                 pricingModel: "FIXED",
-                studentLimit: TRIAL_STUDENT_LIMIT,
+                studentLimit: trialPkg.studentLimit || 0,
                 billingCycle: "Monthly",
                 startDate:    trialStart,
                 endDate:      trialEnd,
@@ -282,7 +158,7 @@ await sendSchoolCredentials({
                 type:         "TRIAL_START",
                 name:         trialPkg.name,
                 price:        0,
-                studentLimit: TRIAL_STUDENT_LIMIT,
+                studentLimit: trialPkg.studentLimit || 0,
                 startDate:    trialStart,
                 endDate:      trialEnd,
             }],
@@ -298,24 +174,18 @@ await sendSchoolCredentials({
         });
     }
 
-    // ===============================
-    // 📤 RESPONSE
-    // ===============================
     return res.status(201).json(
-        new apiResponse(
-            201,
-            {
-                tenant,
-                adminCredentials: {
-                    userId: adminUserId,
-                    password: adminPassword,
-                },
-            },
-            "School registered & admin created 🚀"
-        )
+        new apiResponse(201, {
+            tenant,
+            adminCredentials: { userId: adminUserId, password: adminPassword },
+            superAdminCredentials: { userId: superAdminUserId, password: superAdminPassword },
+        }, "Franchise registered successfully 🚀")
     );
 });
 
+/* ─────────────────────────────────────────────────────────────
+   GET /api/schools  — List all franchise tenants
+───────────────────────────────────────────────────────────── */
 export const getAllTenants = asyncHandler(async (req, res) => {
     const {
         page = 1,
@@ -323,53 +193,32 @@ export const getAllTenants = asyncHandler(async (req, res) => {
         search,
         subdomain,
         isActive,
-        isPagination = "true", // 🔥 new
+        isPagination = "true",
     } = req.query;
 
     const match = {};
-
-    // 🔹 isActive filter
-    if (isActive !== undefined) {
-        match.isActive = isActive === "true";
-    }
-
-    if (subdomain) {
-        match.subdomain = subdomain;
-    }
+    if (isActive !== undefined) match.isActive = isActive === "true";
+    if (subdomain) match.subdomain = subdomain;
 
     let pipeline = [{ $match: match }];
 
-    // ================= SEARCH (MULTI WORD) =================
     if (search) {
-        const words = search
-            .trim()
-            .split(/\s+/)
-            .map((word) => new RegExp(word, "i"));
-
-        const orConditions = words.flatMap((regex) => [
-            { schoolName: { $regex: regex } },
-            { subdomain: { $regex: regex } },
-        ]);
-
+        const words = search.trim().split(/\s+/).map(w => new RegExp(w, "i"));
         pipeline.push({
             $match: {
-                $or: orConditions,
+                $or: words.flatMap(regex => [
+                    { schoolName: { $regex: regex } },
+                    { subdomain:  { $regex: regex } },
+                ]),
             },
         });
     }
 
-    // ================= TOTAL COUNT =================
-    const totalArr = await Tenant.aggregate([
-        ...pipeline,
-        { $count: "count" },
-    ]);
-
+    const totalArr = await Tenant.aggregate([...pipeline, { $count: "count" }]);
     const total = totalArr[0]?.count || 0;
 
-    // ================= SORT =================
     pipeline.push({ $sort: { createdAt: -1 } });
 
-    // ================= PAGINATION =================
     if (isPagination === "true") {
         pipeline.push(
             { $skip: (Number(page) - 1) * Number(limit) },
@@ -377,249 +226,126 @@ export const getAllTenants = asyncHandler(async (req, res) => {
         );
     }
 
-    // ================= SUBSCRIPTION LOOKUP =================
     pipeline.push(
-        {
-            $lookup: {
-                from: "tenantsubscriptions",
-                localField: "_id",
-                foreignField: "tenantId",
-                as: "subscription",
-            },
-        },
+        { $lookup: { from: "tenantsubscriptions", localField: "_id", foreignField: "tenantId", as: "subscription" } },
+        { $addFields: { subscription: { $arrayElemAt: ["$subscription", 0] } } },
         {
             $addFields: {
-                subscription: { $arrayElemAt: ["$subscription", 0] },
-            },
-        },
-        {
-            $addFields: {
-                planName: "$subscription.currentPlan.name",
-                planStatus: "$subscription.status",
+                planName:    "$subscription.currentPlan.name",
+                planStatus:  "$subscription.status",
                 planEndDate: "$subscription.currentPlan.endDate",
-                isTrial: "$subscription.isTrial",
-                studentLimit: "$subscription.totalStudentLimit",
+                isTrial:     "$subscription.isTrial",
             },
         }
     );
 
-    // ================= EXECUTE =================
     const tenants = await Tenant.aggregate(pipeline);
 
     return res.status(200).json(
-        new apiResponse(
-            200,
-            {
-                tenants,
-                total,
-                totalPages:
-                    isPagination === "true"
-                        ? Math.ceil(total / limit)
-                        : 1,
-                currentPage:
-                    isPagination === "true" ? Number(page) : null,
-            },
-            "Tenants fetched successfully 🚀"
-        )
+        new apiResponse(200, {
+            tenants,
+            total,
+            totalPages:  isPagination === "true" ? Math.ceil(total / Number(limit)) : 1,
+            currentPage: isPagination === "true" ? Number(page) : null,
+        }, "Tenants fetched successfully 🚀")
     );
 });
 
-
-
+/* ─────────────────────────────────────────────────────────────
+   GET /api/schools/:id  — Get franchise by ID with credentials
+───────────────────────────────────────────────────────────── */
 export const getTenantById = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "Invalid tenant id"));
+        return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
     }
 
     const tenant = await Tenant.findById(id);
+    if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
 
-    if (!tenant) {
-        return res
-            .status(404)
-            .json(new apiResponse(404, null, "Tenant not found"));
-    }
-
-    // ── Stats from tenant DB (with safe fallback) ──────────────
-    let stats = {
-        totalClasses: 0, totalStudents: 0,
-        totalMStudents: 0, totalFStudents: 0,
-        totalTeachers: 0, totalSections: 0,
-    };
-    let currentSession = null;
+    // Get admin credentials from tenant DB
     let superAdminCreds = null;
     let adminCreds = null;
-
     try {
         const tenantDB = await getTenantDB(tenant.dbUri);
-
-        if (!tenantDB) {
-            throw new Error(`getTenantDB returned undefined for ${tenant.subdomain}`);
-        }
-
-        const Class   = getClassModel(tenantDB);
-        const user    = getUserModel(tenantDB);
-        const Student = getStudentEnrolmentModel(tenantDB);
-        const Teacher = getTeacherModel(tenantDB);
-        const Section = getSectionModel(tenantDB);
-        const Session = getSessionModel(tenantDB);
-
-        const [
-            totalClasses, totalStudents, totalMStudents,
-            totalFStudents, totalTeachers, totalSections,
-            session, superAdmin, admin,
-        ] = await Promise.all([
-            Class.countDocuments({ isActive: true }),
-            Student.countDocuments({ status: "Studying" }),
-            Student.countDocuments({ status: "Studying", gender: "Male" }),
-            Student.countDocuments({ status: "Studying", gender: "Female" }),
-            Teacher.countDocuments({ status: "Active" }),
-            Section.countDocuments({ isActive: true }),
-            Session.findOne({ isCurrent: true }),
-            user.findOne({ role: "SuperAdmin" }).select("userId password role name"),
-            user.findOne({ role: "Admin" }).select("userId password role name"),
+        const User = getUserModel(tenantDB);
+        [superAdminCreds, adminCreds] = await Promise.all([
+            User.findOne({ role: "SuperAdmin" }).select("userId password role name"),
+            User.findOne({ role: "Admin" }).select("userId password role name"),
         ]);
-
-        stats = { totalClasses, totalStudents, totalMStudents, totalFStudents, totalTeachers, totalSections };
-        currentSession = session;
-        superAdminCreds = superAdmin;
-        adminCreds = admin;
     } catch (dbErr) {
-        console.error(`[getTenantById] tenant DB error for ${tenant.subdomain}:`, dbErr.message);
-        // Continue with empty stats — don't crash the whole request
+        console.error(`[getTenantById] DB error for ${tenant.subdomain}:`, dbErr.message);
     }
 
-    // ── Subscription (main DB) ──────────────────────────────────
-    const subscription = await TenantSubscription.findOne({ tenantId: tenant._id.toString() });
-
-    let activePlan = null;
-    let isPlanActive = false;
-
-    if (subscription?.currentPlan) {
-        const now = new Date();
-        isPlanActive =
-            subscription.status === "ACTIVE" &&
-            subscription.currentPlan.startDate <= now &&
-            subscription.currentPlan.endDate >= now;
-        if (isPlanActive) activePlan = subscription.currentPlan;
-    }
+    const subscription = await TenantSubscription.findOne({ tenantId: tenant._id }).lean();
 
     return res.status(200).json(
         new apiResponse(200, {
             tenant,
-            stats,
-            session: currentSession,
             credentials: superAdminCreds,
             superAdminCredentials: superAdminCreds,
             adminCredentials: adminCreds,
             subscription: {
-                isPlanActive,
-                activePlan,
+                status:            subscription?.status || null,
                 isTrial:           subscription?.isTrial || false,
                 trialEndDate:      subscription?.trialEndDate || null,
-                status:            subscription?.status || null,
                 totalStudentLimit: subscription?.totalStudentLimit || 0,
                 usedStudents:      subscription?.usedStudents || 0,
-                remainingStudents: (subscription?.totalStudentLimit || 0) - (subscription?.usedStudents || 0),
+                currentPlan:       subscription?.currentPlan || null,
             },
-        }, "Tenant with stats fetched successfully 🚀")
+        }, "Tenant fetched successfully 🚀")
     );
 });
 
+/* ─────────────────────────────────────────────────────────────
+   PUT /api/schools/:id  — Update franchise
+───────────────────────────────────────────────────────────── */
 export const updateTenant = asyncHandler(async (req, res) => {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "Invalid tenant id"));
+        return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
     }
-
-    const updatedTenant = await Tenant.findByIdAndUpdate(
-        id,
-        req.body,
-        { new: true, runValidators: true }
-    );
-
-    if (!updatedTenant) {
-        return res
-            .status(404)
-            .json(new apiResponse(404, null, "Tenant not found"));
-    }
-
-    return res
-        .status(200)
-        .json(new apiResponse(200, updatedTenant, "Tenant updated successfully"));
+    const updated = await Tenant.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    if (!updated) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
+    return res.status(200).json(new apiResponse(200, updated, "Tenant updated successfully"));
 });
 
+/* ─────────────────────────────────────────────────────────────
+   DELETE /api/schools/:id  — Delete franchise
+───────────────────────────────────────────────────────────── */
 export const deleteTenant = asyncHandler(async (req, res) => {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "Invalid tenant id"));
+        return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
     }
-
     const tenant = await Tenant.findById(id);
-
-    if (!tenant) {
-        return res
-            .status(404)
-            .json(new apiResponse(404, null, "Tenant not found"));
-    }
-
+    if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
     await tenant.deleteOne();
-
-    return res
-        .status(200)
-        .json(new apiResponse(200, null, "Tenant deleted successfully"));
+    return res.status(200).json(new apiResponse(200, null, "Tenant deleted successfully"));
 });
 
-
+/* ─────────────────────────────────────────────────────────────
+   PATCH /api/schools/toggle-status/:id  — Toggle active status
+───────────────────────────────────────────────────────────── */
 export const toggleTenantStatus = asyncHandler(async (req, res) => {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res
-            .status(400)
-            .json(new apiResponse(400, null, "Invalid tenant id"));
+        return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
     }
-
     const tenant = await Tenant.findById(id);
-
-    if (!tenant) {
-        return res
-            .status(404)
-            .json(new apiResponse(404, null, "Tenant not found"));
-    }
-
-    // 🔥 TOGGLE STATUS
+    if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
     tenant.isActive = !tenant.isActive;
-
     await tenant.save();
-
     return res.status(200).json(
-        new apiResponse(
-            200,
-            {
-                tenantId: tenant._id,
-                isActive: tenant.isActive,
-            },
-            `Tenant is now ${tenant.isActive ? "ACTIVE ✅" : "INACTIVE ❌"}`
-        )
+        new apiResponse(200, { tenantId: tenant._id, isActive: tenant.isActive },
+            `Franchise is now ${tenant.isActive ? "ACTIVE ✅" : "INACTIVE ❌"}`)
     );
 });
 
-// ─────────────────────────────────────────────────────────────
-// Login As Tenant User (Admin / SuperAdmin)
-// POST /api/schools/:id/login-as
-// Body: { role: "Admin" | "SuperAdmin" }
-// Returns: { token, user, subdomain, tenantName }
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
+   POST /api/schools/:id/login-as  — Quick login as tenant user
+───────────────────────────────────────────────────────────── */
 export const loginAsTenantUser = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { role = "Admin" } = req.body;
@@ -627,114 +353,65 @@ export const loginAsTenantUser = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json(new apiResponse(400, null, "Invalid tenant id"));
     }
-
     const tenant = await Tenant.findById(id);
-    if (!tenant) {
-        return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
-    }
+    if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
+    if (!tenant.isActive) return res.status(403).json(new apiResponse(403, null, "Tenant is inactive"));
 
-    if (!tenant.isActive) {
-        return res.status(403).json(new apiResponse(403, null, "Tenant is inactive"));
-    }
-
-    // Connect to tenant DB and find the user
     const tenantDB = await getTenantDB(tenant.dbUri);
     const User = getUserModel(tenantDB);
-
     const targetRole = ["Admin", "SuperAdmin"].includes(role) ? role : "Admin";
     const user = await User.findOne({ role: targetRole });
 
-    if (!user) {
-        return res.status(404).json(new apiResponse(404, null, `No ${targetRole} found for this franchise`));
-    }
+    if (!user) return res.status(404).json(new apiResponse(404, null, `No ${targetRole} found for this franchise`));
 
-    // Generate JWT token for this tenant user
     const token = user.generateAuthToken();
-
     return res.status(200).json(
         new apiResponse(200, {
             token,
-            user: {
-                _id:    user._id,
-                userId: user.userId,
-                name:   user.name,
-                role:   user.role,
-            },
+            user: { _id: user._id, userId: user.userId, name: user.name, role: user.role },
             subdomain:  tenant.subdomain,
             tenantName: tenant.schoolName,
         }, `Logged in as ${targetRole} of ${tenant.schoolName} ✅`)
     );
 });
 
-// ─────────────────────────────────────────────────────────────
-// Franchise Direct Login
-// POST /api/franchise/login
-// Body: { userId, password }
-// Header: x-tenant-id: <subdomain>
-// Returns: { token, user, franchise }
-// Called from: Franchise Admin Login page
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
+   POST /api/franchise/login  — Franchise portal login
+───────────────────────────────────────────────────────────── */
 export const franchiseLogin = asyncHandler(async (req, res) => {
     const { userId, password } = req.body;
 
     if (!userId || !password) {
         return res.status(400).json(new apiResponse(400, null, "userId and password are required"));
     }
-
-    // Tenant must be identified by tenantMiddleware via x-tenant-id header
     if (!req.tenant) {
         return res.status(400).json(new apiResponse(400, null, "Franchise not identified. Send x-tenant-id header."));
     }
 
     const tenant = req.tenant;
-
-    if (!tenant.isActive) {
-        return res.status(403).json(new apiResponse(403, null, "This franchise account is inactive."));
-    }
-
-    // Connect to tenant DB
-    if (!req.db) {
-        return res.status(500).json(new apiResponse(500, null, "Franchise database unavailable."));
-    }
+    if (!tenant.isActive) return res.status(403).json(new apiResponse(403, null, "This franchise account is inactive."));
+    if (!req.db) return res.status(500).json(new apiResponse(500, null, "Franchise database unavailable."));
 
     const User = getUserModel(req.db);
     const user = await User.findOne({ userId });
+    if (!user) return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    if (user.password !== password) return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    if (!user.isActive) return res.status(403).json(new apiResponse(403, null, "Your account is inactive."));
 
-    if (!user) {
-        return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
-    }
-
-    // Password check (plain text comparison — existing system pattern)
-    if (user.password !== password) {
-        return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
-    }
-
-    if (!user.isActive) {
-        return res.status(403).json(new apiResponse(403, null, "Your account is inactive."));
-    }
-
-    // Generate token with franchise context
     const token = user.generateAuthToken();
-
-    // Update lastLogin
     user.lastLogin = new Date();
     await user.save();
 
     return res.status(200).json(
         new apiResponse(200, {
             token,
-            user: {
-                _id:    user._id,
-                userId: user.userId,
-                name:   user.name,
-                role:   user.role,
-            },
+            user:      { _id: user._id, userId: user.userId, name: user.name, role: user.role },
             franchise: {
-                _id:          tenant._id,
+                _id:           tenant._id,
                 franchiseName: tenant.schoolName,
                 franchiseCode: tenant.franchiseCode || tenant.schoolCode,
-                subdomain:    tenant.subdomain,
-                logo:         tenant.logo,
+                subdomain:     tenant.subdomain,
+                logo:          tenant.logo,
             },
         }, "Franchise login successful ✅")
     );

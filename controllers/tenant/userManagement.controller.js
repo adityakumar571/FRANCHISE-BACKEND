@@ -175,6 +175,51 @@ export const saveUserAccess = asyncHandler(async (req, res) => {
 })
 
 /* ─────────────────────────────────────────────
+   PATCH /api/users/:id/reset-password — admin resets any user's password
+───────────────────────────────────────────── */
+export const resetUserPassword = asyncHandler(async (req, res) => {
+  const { newPassword } = req.body
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json(new apiResponse(400, null, 'newPassword must be at least 6 characters'))
+  }
+
+  const User = getUserModel(req.db)
+  const user = await User.findById(req.params.id)
+  if (!user) return res.status(404).json(new apiResponse(404, null, 'User not found'))
+
+  user.password  = newPassword   // plain-text (matches existing system pattern)
+  user.updatedAt = new Date()
+  await user.save()
+
+  return res.status(200).json(
+    new apiResponse(200, {
+      userId:   user.userId,
+      name:     user.name,
+      role:     user.role,
+    }, `Password reset for ${user.name} ✅`)
+  )
+})
+
+/* ─────────────────────────────────────────────
+   GET /api/users/:id/credentials — return userId + password for admin view
+───────────────────────────────────────────── */
+export const getUserCredentials = asyncHandler(async (req, res) => {
+  const User = getUserModel(req.db)
+  const user = await User.findById(req.params.id).select('userId password name role')
+  if (!user) return res.status(404).json(new apiResponse(404, null, 'User not found'))
+
+  return res.status(200).json(
+    new apiResponse(200, {
+      userId:   user.userId,
+      password: user.password,
+      name:     user.name,
+      role:     user.role,
+    }, 'Credentials fetched ✅')
+  )
+})
+
+/* ─────────────────────────────────────────────
    GET /api/menu-access/:role — get menu access
 ───────────────────────────────────────────── */
 export const getMenuAccess = asyncHandler(async (req, res) => {
