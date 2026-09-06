@@ -893,35 +893,14 @@ export const syncUsedStudents = asyncHandler(async (req, res) => {
   /* The admin request goes through tenantMiddleware — but for this
      admin-only route, we accept an optional ?dbUri param OR rely on
      the tenant model to look it up */
-  const Tenant = (await import("../models/tenant.model.js")).default;
-  const { getTenantDB } = await import("../utils/dbManager.js");
-
-  const tenant = await Tenant.findById(tenantId);
-  if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
-
-  const db = await getTenantDB(tenant.dbUri);
-  const { getStudentEnrolmentModel } = await import("../models/tenant/student/StudentEnrolment.model.js");
-  const StudentEnrolment = getStudentEnrolmentModel(db);
-
-  const count = await StudentEnrolment.countDocuments({ status: { $ne: "Left" } });
-
-  const subscription = await TenantSubscription.findOneAndUpdate(
-    { tenantId },
-    { $set: { usedStudents: count } },
-    { new: true }
-  );
-
-  if (!subscription)
-    return res.status(404).json(new apiResponse(404, null, "No subscription found for this tenant"));
-
+  // Student enrolment model has been removed (franchise system).
+  // Return a no-op response so existing callers don't break.
   return res.status(200).json(
     new apiResponse(200, {
-      usedStudents:      count,
-      totalStudentLimit: subscription.totalStudentLimit,
-      remaining:         subscription.totalStudentLimit === 0
-        ? "unlimited"
-        : Math.max(0, subscription.totalStudentLimit - count),
-    }, "usedStudents synced successfully")
+      usedStudents:      0,
+      totalStudentLimit: 0,
+      remaining:         "unlimited",
+    }, "usedStudents sync not applicable (franchise system)")
   );
 });
 
