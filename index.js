@@ -1,5 +1,5 @@
 ﻿
-import 'newrelic'
+// import 'newrelic'  // disabled — blocks startup in local dev
 import "./config/env.js"; // Must be first — loads env before any other imports
 import express from "express";
 import cors from "cors";
@@ -28,8 +28,14 @@ import { dbMiddleware } from "./middleware/db.middleware.js";
 import { subscriptionGuard } from "./middleware/subscriptionGuard.js";
 import tenantSubscriptionRoutes from "./routes/tenantSelfSubscriptionRoutes.js";
 
+/* ================= DISTRIBUTOR ================= */
+import distributorRoutes from "./routes/distributor.routes.js";
+
 /* ================= TENANT AUTH ================= */
 import tenantAuthRoutes from "./routes/tenant/auth/tenantUserLoginRoutes.js";
+
+/* ================= USER MANAGEMENT ================= */
+import userManagementRoutes from "./routes/tenant/userManagementRoutes.js";
 
 /* ================= UPLOAD ================= */
 import uploadRoutes from "./routes/uploadRoutes.js";
@@ -177,6 +183,7 @@ initializeFirebase();
 /* ================= PUBLIC ROUTES (NO TENANT CONTEXT) ================= */
 app.use("/api/mainUser",        mainUserRoutes);
 app.use("/api/schools",         tenantRoutes);
+app.use("/api/distributor",     distributorRoutes);   // ← Distributor portal
 app.use("/api/subscriptionPlan", subscriptionPlanRoutes);
 app.use("/api/upload",          uploadRoutes);
 app.use("/api/saas",            saasRoutes);
@@ -260,6 +267,9 @@ app.get("/api/subscription-status", async (req, res) => {
 
 /* ================= TENANT AUTH ================= */
 app.use("/api/auth", tenantAuthRoutes);
+
+/* ================= USER MANAGEMENT ================= */
+app.use("/api/users", userManagementRoutes);
 
 /* ================= FRANCHISE LOGIN (needs tenant context from middleware) ================= */
 /* POST /api/franchise/login  — Body: { userId, password }, Header: x-tenant-id: <subdomain> */

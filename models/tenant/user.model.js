@@ -41,6 +41,11 @@ const UserSchema = new mongoose.Schema(
                 "Accountant",
                 "HRManager",   // HR module — can edit staff, approve leave, generate payroll
                 "HRStaff",     // HR module — can add staff, enter attendance, view reports
+                // ── Pharmacy franchise roles ──────────────────────────
+                "Accounts",    // Accounts/billing staff
+                "Staff",       // General pharmacy staff (POS, dispensing)
+                "Customer",    // Registered customer/patient
+                "Vendor",      // Vendor / Supplier representative
             ],
             default: "User",
             required: true,
