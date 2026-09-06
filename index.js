@@ -8,7 +8,7 @@ import compression from "compression";
 /* ── Main DB ── */
 import connectMainDB from "./config/mainDb.js";
 
-/* ── Main Routes ── */
+/* ── Main/Public Routes ── */
 import tenantRoutes              from "./routes/tenant.routes.js";
 import mainUserRoutes            from "./routes/mainUser.routes.js";
 import subscriptionPlanRoutes    from "./routes/Subscription.routes.js";
@@ -20,20 +20,17 @@ import pricingConfigRoutes       from "./routes/PricingConfig.routes.js";
 import sessionBillingRoutes      from "./routes/SessionBillingRoutes.js";
 import freeTrialPackageRoutes    from "./routes/FreeTrialPackage.routes.js";
 import distributorRoutes         from "./routes/distributor.routes.js";
-import supportRoutes             from "./routes/supportRoutes.js";
-import portalRoutes              from "./routes/portal.routes.js";
 import faqRoutes                 from "./routes/faqRoutes.js";
 import contactRoutes             from "./routes/contactRoutes.js";
-import newsletterRoutes          from "./routes/newsletterRoutes.js";
 import siteSettingsRoutes        from "./routes/siteSettingsRoutes.js";
 import uploadRoutes              from "./routes/uploadRoutes.js";
 
 /* ── Tenant Middleware ── */
-import { tenantMiddleware } from "./middleware/tenant.middleware.js";
-import { dbMiddleware }     from "./middleware/db.middleware.js";
+import { tenantMiddleware }  from "./middleware/tenant.middleware.js";
+import { dbMiddleware }      from "./middleware/db.middleware.js";
 import { subscriptionGuard } from "./middleware/subscriptionGuard.js";
 
-/* ── Tenant Routes (require tenant context) ── */
+/* ── Tenant Routes ── */
 import tenantAuthRoutes         from "./routes/tenant/auth/tenantUserLoginRoutes.js";
 import userManagementRoutes     from "./routes/tenant/userManagementRoutes.js";
 import tenantSubscriptionRoutes from "./routes/tenantSelfSubscriptionRoutes.js";
@@ -42,7 +39,7 @@ import attendanceLeaveRoutes    from "./routes/tenant/hr/attendanceLeaveRoutes.j
 import payrollRoutes            from "./routes/tenant/hr/payrollRoutes.js";
 import accountRoutes            from "./routes/tenant/hr/accountRoutes.js";
 
-/* ── Franchise Login ── */
+/* ── Franchise Login controller ── */
 import { franchiseLogin } from "./controllers/tenant.controller.js";
 
 /* ─────────────────────────────────────────── */
@@ -82,25 +79,22 @@ connectMainDB();
 initializeFirebase();
 
 /* ══════════════════════════════════════════
-   PUBLIC ROUTES (no tenant context needed)
+   PUBLIC ROUTES (no tenant context)
 ══════════════════════════════════════════ */
-app.use("/api/mainUser",             mainUserRoutes);
-app.use("/api/schools",              tenantRoutes);
-app.use("/api/distributor",          distributorRoutes);
-app.use("/api/subscriptionPlan",     subscriptionPlanRoutes);
-app.use("/api/upload",               uploadRoutes);
-app.use("/api/saas",                 saasRoutes);
-app.use("/api/monthly-billing",      monthlyBillingRoutes);
-app.use("/api/pricing-config",       pricingConfigRoutes);
-app.use("/api/support",              supportRoutes);
-app.use("/api/portal",               portalRoutes);
-app.use("/api/faq",                  faqRoutes);
-app.use("/api/contact",              contactRoutes);
-app.use("/api/newsletter",           newsletterRoutes);
-app.use("/api/site-settings",        siteSettingsRoutes);
-app.use("/api/subscription",         subscriptionRoutes);
-app.use("/api/free-trial-packages",  freeTrialPackageRoutes);
-app.use("/api/session-billing",      sessionBillingRoutes);
+app.use("/api/mainUser",            mainUserRoutes);
+app.use("/api/schools",             tenantRoutes);
+app.use("/api/distributor",         distributorRoutes);
+app.use("/api/subscriptionPlan",    subscriptionPlanRoutes);
+app.use("/api/upload",              uploadRoutes);
+app.use("/api/saas",                saasRoutes);
+app.use("/api/monthly-billing",     monthlyBillingRoutes);
+app.use("/api/pricing-config",      pricingConfigRoutes);
+app.use("/api/faq",                 faqRoutes);
+app.use("/api/contact",             contactRoutes);
+app.use("/api/site-settings",       siteSettingsRoutes);
+app.use("/api/subscription",        subscriptionRoutes);
+app.use("/api/free-trial-packages", freeTrialPackageRoutes);
+app.use("/api/session-billing",     sessionBillingRoutes);
 
 /* ══════════════════════════════════════════
    MULTI-TENANT MIDDLEWARE
@@ -150,8 +144,7 @@ app.get("/api/subscription-status", async (req, res) => {
         totalStudentLimit: sub.totalStudentLimit,
         usedStudents:      sub.usedStudents || 0,
         remaining:         sub.totalStudentLimit > 0
-          ? Math.max(0, sub.totalStudentLimit - (sub.usedStudents || 0))
-          : "unlimited",
+          ? Math.max(0, sub.totalStudentLimit - (sub.usedStudents || 0)) : "unlimited",
         usagePercent: usagePct,
         paidStatus:   sub.paidStatus,
         dueDate:      sub.dueDate,
@@ -164,23 +157,13 @@ app.get("/api/subscription-status", async (req, res) => {
 });
 
 /* ══════════════════════════════════════════
-   TENANT ROUTES (require tenant context)
+   TENANT ROUTES
 ══════════════════════════════════════════ */
-
-/* Auth */
-app.use("/api/auth", tenantAuthRoutes);
-
-/* User management */
-app.use("/api/users", userManagementRoutes);
-
-/* Franchise login */
+app.use("/api/auth",            tenantAuthRoutes);
+app.use("/api/users",           userManagementRoutes);
 app.post("/api/franchise/login", franchiseLogin);
-
-/* Subscription */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
-
-/* Admin */
-app.use("/api/admins", createAdminRoutes);
+app.use("/api/admins",          createAdminRoutes);
 
 /* HR Module */
 app.use("/api/hr", hrRoutes);
@@ -188,12 +171,10 @@ app.use("/api/hr", attendanceLeaveRoutes);
 app.use("/api/hr", payrollRoutes);
 app.use("/api/hr", accountRoutes);
 
-/* ══════════════════════════════════════════
-   FALLBACK
-══════════════════════════════════════════ */
+/* ── Fallback ── */
 app.use("/api", (_req, res) => res.send("Franchise API working ✅"));
 
-/* Global Error Handler */
+/* ── Global Error Handler ── */
 app.use((err, req, res, next) => {
   console.error("Unhandled Error:", err?.message || err);
   const status  = err?.statusCode || err?.status || 500;
@@ -205,6 +186,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-/* Server */
+/* ── Server ── */
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => console.log(`🚀 Franchise server running on port ${PORT}`));

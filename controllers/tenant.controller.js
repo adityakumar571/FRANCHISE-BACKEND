@@ -6,7 +6,7 @@ import { apiResponse } from "../utils/apiResponse.js";
 import { getTenantDB } from "../utils/dbManager.js";
 import { getUserModel } from "../models/tenant/user.model.js";
 import mongoose from "mongoose";
-import { mailer } from "../utils/mailer.js";
+import { sendMail } from "../utils/mailer.js";
 
 /* ─────────────────────────────────────────────────────────────
    POST /api/schools  — Register a new franchise tenant
@@ -103,7 +103,7 @@ export const registerTenant = asyncHandler(async (req, res) => {
     const emailTo = franchiseAdminEmail || schoolEmail;
     if (emailTo) {
         try {
-            await mailer({
+            await sendMail({
                 to: emailTo,
                 subject: `Franchise Portal — Login Credentials for ${schoolName}`,
                 html: `
