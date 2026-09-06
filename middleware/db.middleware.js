@@ -1,15 +1,13 @@
 import { getTenantDB } from "../utils/dbManager.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { registerTenantModels } from "../utils/registerTenantModels.js";
+import { getUserModel } from "../models/tenant/user.model.js";
+import { getUserAccessModel } from "../models/tenant/UserAccess.model.js";
+import { getMenuAccessModel } from "../models/tenant/MenuAccess.model.js";
 
 export const dbMiddleware = asyncHandler(async (req, res, next) => {
-    // CENTRAL (no tenant DB needed)
-    if (req.isMain) {
-        console.log("👉 Using CENTRAL DB");
-        return next();
-    }
+    // Central DB — no tenant DB needed
+    if (req.isMain) return next();
 
-    // Tenant context must be set by tenantMiddleware before this runs
     if (!req.tenant) {
         return res.status(400).json({ message: "Tenant context missing" });
     }
@@ -27,7 +25,12 @@ export const dbMiddleware = asyncHandler(async (req, res, next) => {
         }
 
         req.db = db;
-        registerTenantModels(db);
+
+        // Pre-register franchise models on this connection
+        getUserModel(db);
+        getUserAccessModel(db);
+        getMenuAccessModel(db);
+
         next();
     } catch (err) {
         console.error(`[dbMiddleware] Connection error for tenant "${req.tenant.subdomain}":`, err.message);
