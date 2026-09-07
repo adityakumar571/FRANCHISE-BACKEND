@@ -162,6 +162,29 @@ app.get("/api/subscription-status", async (req, res) => {
 app.use("/api/auth",            tenantAuthRoutes);
 app.use("/api/users",           userManagementRoutes);
 app.post("/api/franchise/login", franchiseLogin);
+
+/* ================= FRANCHISE MODULE ROUTES ================= */
+import franchiseDashboardRoutes from "./routes/tenant/franchise/dashboardRoutes.js";
+import franchiseSalesRoutes     from "./routes/tenant/franchise/salesRoutes.js";
+import franchisePurchaseRoutes  from "./routes/tenant/franchise/purchaseRoutes.js";
+import franchiseInventoryRoutes from "./routes/tenant/franchise/inventoryRoutes.js";
+import franchisePosRoutes       from "./routes/tenant/franchise/posRoutes.js";
+import franchiseFullPurchaseRoutes  from "./routes/tenant/franchise/fullPurchaseRoutes.js";
+import franchiseFullInventoryRoutes from "./routes/tenant/franchise/fullInventoryRoutes.js";
+import franchiseLiveRatesRoutes     from "./routes/tenant/franchise/liveRatesRoutes.js";
+import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRoutes.js";
+
+app.use("/api/franchise/dashboard",   franchiseDashboardRoutes);
+app.use("/api/franchise/sales",       franchiseSalesRoutes);
+app.use("/api/franchise/purchase",    franchisePurchaseRoutes);
+app.use("/api/franchise/purchase",    franchiseFullPurchaseRoutes);
+app.use("/api/franchise/inventory",   franchiseInventoryRoutes);
+app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);
+app.use("/api/franchise/pos",         franchisePosRoutes);
+app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
+app.use("/api/franchise",             franchiseRemainingRoutes);
+
+/* Tenant's own subscription info */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
 app.use("/api/admins",          createAdminRoutes);
 
