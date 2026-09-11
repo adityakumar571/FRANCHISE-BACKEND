@@ -33,6 +33,7 @@ import { subscriptionGuard } from "./middleware/subscriptionGuard.js";
 /* ── Tenant Routes ── */
 import tenantAuthRoutes         from "./routes/tenant/auth/tenantUserLoginRoutes.js";
 import userManagementRoutes     from "./routes/tenant/userManagementRoutes.js";
+import roleRoutes               from "./routes/tenant/roleRoutes.js";
 import tenantSubscriptionRoutes from "./routes/tenantSelfSubscriptionRoutes.js";
 import hrRoutes                 from "./routes/tenant/hr/hrRoutes.js";
 import attendanceLeaveRoutes    from "./routes/tenant/hr/attendanceLeaveRoutes.js";
@@ -161,6 +162,7 @@ app.get("/api/subscription-status", async (req, res) => {
 ══════════════════════════════════════════ */
 app.use("/api/auth",            tenantAuthRoutes);
 app.use("/api/users",           userManagementRoutes);
+app.use("/api/roles",           roleRoutes);
 app.post("/api/franchise/login", franchiseLogin);
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
 app.use("/api/admins",          createAdminRoutes);

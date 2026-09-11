@@ -3,9 +3,7 @@ import jwt from "jsonwebtoken";
 
 const UserSchema = new mongoose.Schema(
     {
-        phone: {
-            type: String,
-        },
+        phone: { type: String },
 
         userId: {
             type: String,
@@ -30,24 +28,10 @@ const UserSchema = new mongoose.Schema(
             enum: ["Male", "Female", "Other"],
         },
 
+        // ── Role is now a free-form string — managed via Role master ──
         role: {
             type: String,
-            enum: [
-                "User",
-                "Student",
-                "Admin",
-                "SuperAdmin",
-                "Teacher",
-                "Accountant",
-                "HRManager",   // HR module — can edit staff, approve leave, generate payroll
-                "HRStaff",     // HR module — can add staff, enter attendance, view reports
-                // ── Pharmacy franchise roles ──────────────────────────
-                "Accounts",    // Accounts/billing staff
-                "Staff",       // General pharmacy staff (POS, dispensing)
-                "Customer",    // Registered customer/patient
-                "Vendor",      // Vendor / Supplier representative
-            ],
-            default: "User",
+            default: "Staff",
             required: true,
         },
 
@@ -62,19 +46,9 @@ const UserSchema = new mongoose.Schema(
         },
 
         profilePic: String,
-
-        address: {
-            type: String,
-            trim: true,
-        },
-
-        password: {
-            type: String,
-        },
-
-        fcmToken: {
-            type: String,
-        },
+        address:    { type: String, trim: true },
+        password:   { type: String },
+        fcmToken:   { type: String },
 
         isActive: {
             type: Boolean,
@@ -82,28 +56,19 @@ const UserSchema = new mongoose.Schema(
         },
 
         lastLogin: Date,
-        
     },
     { timestamps: true }
 );
 
 UserSchema.methods.generateAuthToken = function () {
     return jwt.sign(
-        {
-            userId: this._id,
-            role: this.role,
-        },
+        { userId: this._id, role: this.role },
         process.env.JWT_SECRET,
-        {
-            expiresIn: process.env.JWT_EXPIRE || "30d",
-        }
+        { expiresIn: process.env.JWT_EXPIRE || "30d" }
     );
 };
 
-
 export const getUserModel = (connection) => {
-    // Use existing model if already registered with the correct schema
-    // (model name "User" must match the schema that includes HRManager/HRStaff roles)
     try {
         return connection.model("User");
     } catch {

@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { getUserModel } from "../models/tenant/user.model.js";
 import { getUserAccessModel } from "../models/tenant/UserAccess.model.js";
 import { getMenuAccessModel } from "../models/tenant/MenuAccess.model.js";
+import { getRoleModel } from "../models/tenant/Role.model.js";
 
 export const dbMiddleware = asyncHandler(async (req, res, next) => {
     // Central DB — no tenant DB needed
@@ -30,6 +31,7 @@ export const dbMiddleware = asyncHandler(async (req, res, next) => {
         getUserModel(db);
         getUserAccessModel(db);
         getMenuAccessModel(db);
+        getRoleModel(db);
 
         next();
     } catch (err) {
