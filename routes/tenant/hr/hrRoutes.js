@@ -5,7 +5,7 @@ import { verifyJWT, authorizeUserType } from "../../../middleware/authTypeMiddle
 import { getHRDashboard }                                          from "../../../controllers/tenant/hr/hrDashboardController.js";
 import { getDepartments, getDepartmentById, createDepartment, updateDepartment, deleteDepartment } from "../../../controllers/tenant/hr/departmentController.js";
 import { getDesignations, getDesignationById, createDesignation, updateDesignation, deleteDesignation } from "../../../controllers/tenant/hr/designationController.js";
-import { getAllStaff, getStaffById, createStaff, updateStaff, deleteStaff } from "../../../controllers/tenant/hr/staffController.js";
+import { getAllStaff, getStaffById, createStaff, updateStaff, deleteStaff, getStaffCredentials } from "../../../controllers/tenant/hr/staffController.js";
 import { hrLogin, createHRUser, getHRUsers, updateHRUser, deleteHRUser } from "../../../controllers/tenant/hr/hrUserController.js";
 
 const router = express.Router();
@@ -63,10 +63,11 @@ router.delete("/designations/:id", adminOnly,    deleteDesignation);
 // GET    /api/hr/staff/:id    → Admin, SuperAdmin, HRManager, HRStaff
 // PUT    /api/hr/staff/:id    → Admin, SuperAdmin, HRManager
 // DELETE /api/hr/staff/:id    → Admin, SuperAdmin only
-router.get   ("/staff",     hrReadAccess,  getAllStaff);
-router.post  ("/staff",     hrWriteAccess, createStaff);
-router.get   ("/staff/:id", hrReadAccess,  getStaffById);
-router.put   ("/staff/:id", hrWriteAccess, updateStaff);
-router.delete("/staff/:id", adminOnly,     deleteStaff);
+router.get   ("/staff",          hrReadAccess,  getAllStaff);
+router.post  ("/staff",          hrWriteAccess, createStaff);
+router.get   ("/staff/:id/credentials", hrReadAccess, getStaffCredentials);   // ← credentials
+router.get   ("/staff/:id",      hrReadAccess,  getStaffById);
+router.put   ("/staff/:id",      hrWriteAccess, updateStaff);
+router.delete("/staff/:id",      adminOnly,     deleteStaff);
 
 export default router;

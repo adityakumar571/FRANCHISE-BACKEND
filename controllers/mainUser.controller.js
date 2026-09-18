@@ -77,28 +77,35 @@ export const createUser = asyncHandler(async (req, res) => {
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
-    const { userId, password } = req.body;
+    const { userId, password, email } = req.body;
 
     // ===============================
     // ❗ VALIDATION
     // ===============================
-    if (!userId || !password) {
+    if ((!userId && !email) || !password) {
         return res
             .status(400)
-            .json(new apiResponse(400, null, "userId and password required"));
+            .json(new apiResponse(400, null, "userId/email and password required"));
     }
 
     // ===============================
-    // 🔍 FIND USER
+    // 🔍 FIND USER — by email or userId
     // ===============================
-    console.log("🔍 LOGIN ATTEMPT — userId:", JSON.stringify(userId), "| password:", JSON.stringify(password));
-    const user = await User.findOne({ userId }).populate("tenantId", "schoolName logo subdomain");
+    const query = email ? { email: email.toLowerCase().trim() } : { userId }
+    console.log("🔍 LOGIN ATTEMPT —", JSON.stringify(query), "| password:", JSON.stringify(password));
+    const user = await User.findOne(query).populate("tenantId", "schoolName logo subdomain");
     console.log("🔍 USER FOUND:", user ? `YES — stored password: ${JSON.stringify(user.password)}` : "NO");
 
     if (!user) {
         return res
             .status(404)
             .json(new apiResponse(404, null, "User not found"));
+    }
+
+    if (user.isActive === false) {
+        return res
+            .status(403)
+            .json(new apiResponse(403, null, "Account is deactivated"));
     }
 
     // ===============================
@@ -122,6 +129,8 @@ export const loginUser = asyncHandler(async (req, res) => {
     // 🎟️ TOKEN GENERATE
     // ===============================
     const token = user.generateAuthToken();
+    user.lastLogin = new Date();
+    await user.save();
 
     // ===============================
     // 📤 RESPONSE
