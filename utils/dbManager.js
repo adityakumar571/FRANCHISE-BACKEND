@@ -19,9 +19,13 @@ export const getTenantDB = async (dbUri) => {
     // all await the same connection attempt instead of creating duplicates.
     connectionPromises[dbUri] = (async () => {
         try {
+            // mongoose v8 mein useNewUrlParser/useUnifiedTopology deprecated hain — removed
             const conn = mongoose.createConnection(dbUri, {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
+                serverSelectionTimeoutMS: 5000,
+                connectTimeoutMS: 10000,
+                maxPoolSize: 10,
+                minPoolSize: 2,
+                socketTimeoutMS: 45000,
             });
 
             await new Promise((resolve, reject) => {

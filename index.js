@@ -75,14 +75,22 @@ app.use(cors({
   ],
 }));
 
-/* ── Connect DB + Firebase ── */
-connectMainDB();
-initializeFirebase();
+/* ── Connect DB + Firebase in parallel ── */
+Promise.all([
+  connectMainDB(),
+  Promise.resolve(initializeFirebase()),
+]).catch((err) => {
+  console.error("❌ Startup initialization failed:", err.message);
+  process.exit(1);
+});
 
 /* ══════════════════════════════════════════
    PUBLIC ROUTES (no tenant context)
 ══════════════════════════════════════════ */
 app.use("/api/mainUser",            mainUserRoutes);
+// SuperAdmin login — public, no tenant context needed
+// Frontend calls: POST /api/auth/superadmin/login
+app.use("/api/auth/superadmin",     mainUserRoutes);
 app.use("/api/schools",             tenantRoutes);
 app.use("/api/distributor",         distributorRoutes);
 app.use("/api/subscriptionPlan",    subscriptionPlanRoutes);

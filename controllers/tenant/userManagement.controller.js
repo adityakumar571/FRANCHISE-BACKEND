@@ -206,15 +206,22 @@ export const resetUserPassword = asyncHandler(async (req, res) => {
 ───────────────────────────────────────────── */
 export const getUserCredentials = asyncHandler(async (req, res) => {
   const User = getUserModel(req.db)
-  const user = await User.findById(req.params.id).select('userId password name role')
+
+  // +password explicitly select karo — default mein excluded hai
+  const user = await User.findById(req.params.id).select('+userId +password +name +role')
   if (!user) return res.status(404).json(new apiResponse(404, null, 'User not found'))
+
+  const userId   = user.userId   || null
+  const password = user.password || null
+
+  console.log(`[credentials] userId=${userId} password=${password ? '***set***' : 'NULL'} for _id=${req.params.id}`)
 
   return res.status(200).json(
     new apiResponse(200, {
-      userId:   user.userId,
-      password: user.password,
-      name:     user.name,
-      role:     user.role,
+      userId,
+      password,
+      name: user.name,
+      role: user.role,
     }, 'Credentials fetched ✅')
   )
 })

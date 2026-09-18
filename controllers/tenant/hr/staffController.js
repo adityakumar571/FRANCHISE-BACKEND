@@ -1,4 +1,5 @@
 import { getStaffModel } from "../../../models/tenant/hr/Staff.model.js";
+import { getUserModel }  from "../../../models/tenant/user.model.js";
 import { apiResponse }   from "../../../utils/apiResponse.js";
 import { asyncHandler }  from "../../../utils/asyncHandler.js";
 import { apiError }      from "../../../utils/apiError.js";
@@ -154,4 +155,56 @@ export const deleteStaff = asyncHandler(async (req, res) => {
   const member = await Staff.findByIdAndDelete(req.params.id);
   if (!member) return apiError(res, 404, false, "Staff not found");
   return res.status(200).json(new apiResponse(200, null, "Staff deleted successfully"));
+});
+
+// ── GET STAFF LOGIN CREDENTIALS ───────────────────────────────────────────────
+// Staff ka mobile/email se User table mein match karo aur userId + password do
+export const getStaffCredentials = asyncHandler(async (req, res) => {
+  const Staff = getStaffModel(req.db);
+  const User  = getUserModel(req.db);
+
+  const staff = await Staff.findById(req.params.id).lean();
+  if (!staff) return apiError(res, 404, false, "Staff not found");
+
+  // mobile ya email se User table mein dhundo
+  const orQuery = [];
+  if (staff.mobile) orQuery.push({ phone: staff.mobile });
+  if (staff.email)  orQuery.push({ email: staff.email.toLowerCase() });
+
+  if (orQuery.length === 0) {
+    return res.status(200).json(
+      new apiResponse(200, {
+        found: false,
+        staffName: staff.employeeName,
+        message: "No mobile or email on staff record — cannot match a login account",
+      }, "No match possible")
+    );
+  }
+
+  // +password explicitly select karo
+  const user = await User.findOne({ $or: orQuery }).select("+userId +password +name +role +isActive");
+
+  if (!user) {
+    return res.status(200).json(
+      new apiResponse(200, {
+        found: false,
+        staffName: staff.employeeName,
+        mobile: staff.mobile || null,
+        email:  staff.email  || null,
+        message: "No login account linked to this staff member yet",
+      }, "No user account found")
+    );
+  }
+
+  return res.status(200).json(
+    new apiResponse(200, {
+      found:    true,
+      userId:   user.userId,
+      password: user.password || null,
+      name:     user.name,
+      role:     user.role,
+      isActive: user.isActive,
+      staffName: staff.employeeName,
+    }, "Credentials fetched ✅")
+  );
 });
