@@ -7,6 +7,7 @@ import { getTenantDB } from "../utils/dbManager.js";
 import { getUserModel } from "../models/tenant/user.model.js";
 import mongoose from "mongoose";
 import { sendMail } from "../utils/mailer.js";
+import { logFromReq } from "../utils/logActivity.js";
 
 /* ─────────────────────────────────────────────────────────────
    POST /api/schools  — Register a new franchise tenant
@@ -174,6 +175,13 @@ export const registerTenant = asyncHandler(async (req, res) => {
         });
     }
 
+    logFromReq(req, {
+        action: `Created Franchise: ${schoolName}`,
+        target: schoolName,
+        module: "Franchise",
+        type:   "Create",
+    });
+
     return res.status(201).json(
         new apiResponse(201, {
             tenant,
@@ -308,6 +316,7 @@ export const updateTenant = asyncHandler(async (req, res) => {
     }
     const updated = await Tenant.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
     if (!updated) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
+    logFromReq(req, { action: `Updated Franchise: ${updated.schoolName}`, target: updated.schoolName, module: "Franchise", type: "Update" });
     return res.status(200).json(new apiResponse(200, updated, "Tenant updated successfully"));
 });
 
@@ -322,6 +331,7 @@ export const deleteTenant = asyncHandler(async (req, res) => {
     const tenant = await Tenant.findById(id);
     if (!tenant) return res.status(404).json(new apiResponse(404, null, "Tenant not found"));
     await tenant.deleteOne();
+    logFromReq(req, { action: `Deleted Franchise: ${tenant.schoolName}`, target: tenant.schoolName, module: "Franchise", type: "Delete" });
     return res.status(200).json(new apiResponse(200, null, "Tenant deleted successfully"));
 });
 

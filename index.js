@@ -20,6 +20,9 @@ import pricingConfigRoutes       from "./routes/PricingConfig.routes.js";
 import sessionBillingRoutes      from "./routes/SessionBillingRoutes.js";
 import freeTrialPackageRoutes    from "./routes/FreeTrialPackage.routes.js";
 import distributorRoutes         from "./routes/distributor.routes.js";
+import newsletterRoutes          from "./routes/newsletterRoutes.js";
+import activityLogRoutes         from "./routes/activityLogRoutes.js";
+import medicineRoutes            from "./routes/medicineRoutes.js";
 import faqRoutes                 from "./routes/faqRoutes.js";
 import contactRoutes             from "./routes/contactRoutes.js";
 import siteSettingsRoutes        from "./routes/siteSettingsRoutes.js";
@@ -101,6 +104,9 @@ app.use("/api/pricing-config",      pricingConfigRoutes);
 app.use("/api/faq",                 faqRoutes);
 app.use("/api/contact",             contactRoutes);
 app.use("/api/site-settings",       siteSettingsRoutes);
+app.use("/api/newsletter",          newsletterRoutes);
+app.use("/api/activity-logs",       activityLogRoutes);
+app.use("/api/medicine",            medicineRoutes);
 app.use("/api/subscription",        subscriptionRoutes);
 app.use("/api/free-trial-packages", freeTrialPackageRoutes);
 app.use("/api/session-billing",     sessionBillingRoutes);
@@ -197,6 +203,11 @@ app.use("/api/franchise",             franchiseRemainingRoutes);
 /* Tenant's own subscription info */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
 app.use("/api/admins",          createAdminRoutes);
+// Alias for SuperAdmin login (frontend calls /api/auth/superadmin/login)
+app.post("/api/auth/superadmin/login", (req, res, next) => {
+  req.url = "/login";
+  createAdminRoutes(req, res, next);
+});
 
 /* HR Module */
 app.use("/api/hr", hrRoutes);
