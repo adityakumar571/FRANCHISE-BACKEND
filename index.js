@@ -113,10 +113,15 @@ app.use(dbMiddleware);
 
 /* Subscription Guard */
 app.use((req, res, next) => {
-  const url = req.originalUrl;
-  const exempted = ["/api/auth", "/api/subscription-status", "/api/my-subscription"];
-  if (exempted.some(p => url.startsWith(p))) return next();
-  return subscriptionGuard(req, res, next);
+    const url = req.originalUrl;
+    const exempted = [
+        "/api/auth",
+        "/api/subscription-status",
+        "/api/my-subscription",
+    ];
+    const isExempt = exempted.some(path => url.startsWith(path));
+    if (isExempt) return next();
+    return subscriptionGuard(req, res, next);
 });
 
 /* Real-time subscription status */
