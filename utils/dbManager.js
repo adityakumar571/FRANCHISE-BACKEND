@@ -1,4 +1,9 @@
 import mongoose from "mongoose";
+import dns from "dns";
+
+// Force IPv4 + Google DNS — fixes MongoDB Atlas SRV resolution on restrictive networks
+dns.setDefaultResultOrder("ipv4first");
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 // Cache promises (not connections) to eliminate the race condition where
 // two simultaneous requests for the same tenant both find an empty cache
@@ -19,10 +24,10 @@ export const getTenantDB = async (dbUri) => {
     // all await the same connection attempt instead of creating duplicates.
     connectionPromises[dbUri] = (async () => {
         try {
-            // mongoose v8 mein useNewUrlParser/useUnifiedTopology deprecated hain — removed
             const conn = mongoose.createConnection(dbUri, {
-                serverSelectionTimeoutMS: 5000,
-                connectTimeoutMS: 10000,
+                family: 4,
+                serverSelectionTimeoutMS: 15000,
+                connectTimeoutMS: 15000,
                 maxPoolSize: 10,
                 minPoolSize: 2,
                 socketTimeoutMS: 45000,

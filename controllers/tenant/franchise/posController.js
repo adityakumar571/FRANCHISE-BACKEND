@@ -9,10 +9,240 @@ import { getHoldBillModel } from '../../../models/tenant/franchise/HoldBill.mode
 import { getDayClosingModel } from '../../../models/tenant/franchise/DayClosing.model.js';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Seed Medicine + MedicineBatch data (50+ medicines with batches)
+// ────────────────────────────────────────────────────────────────────────────
+const seedMedicineData = async (db) => {
+  const Medicine = getMedicineModel(db);
+  const MedicineBatch = getMedicineBatchModel(db);
+  const count = await Medicine.countDocuments();
+  if (count > 0) return;
+
+  const medicines = [
+    { name: 'Dolo 650 Tablet', salt: 'Paracetamol', company: 'Micro Labs', category: 'Pain Relief', formulation: 'Tablet', packSize: '15 Tablets', mrp: 32.50, gstPercent: 12, barcode: 'MED001', rackLabel: 'A-1', reorderLevel: 20, currentStock: 150 },
+    { name: 'Crocin 650 Tablet', salt: 'Paracetamol', company: 'GSK', category: 'Pain Relief', formulation: 'Tablet', packSize: '15 Tablets', mrp: 28.00, gstPercent: 12, barcode: 'MED002', rackLabel: 'A-1', reorderLevel: 20, currentStock: 200 },
+    { name: 'Calpol 650 Tablet', salt: 'Paracetamol', company: 'GSK', category: 'Pain Relief', formulation: 'Tablet', packSize: '15 Tablets', mrp: 30.00, gstPercent: 12, barcode: 'MED003', rackLabel: 'A-1', reorderLevel: 20, currentStock: 180 },
+    { name: 'Azithral 500 Tablet', salt: 'Azithromycin', company: 'Alembic', category: 'Antibiotic', formulation: 'Tablet', packSize: '3 Tablets', mrp: 85.00, gstPercent: 12, barcode: 'MED004', rackLabel: 'B-2', reorderLevel: 10, currentStock: 80 },
+    { name: 'Augmentin 625', salt: 'Amoxicillin+Clavulanic Acid', company: 'GSK', category: 'Antibiotic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 225.00, gstPercent: 12, barcode: 'MED005', rackLabel: 'B-2', reorderLevel: 10, currentStock: 60 },
+    { name: 'Amoxicillin 500mg', salt: 'Amoxicillin', company: 'Cipla', category: 'Antibiotic', formulation: 'Capsule', packSize: '10 Capsules', mrp: 65.00, gstPercent: 12, barcode: 'MED006', rackLabel: 'B-2', reorderLevel: 15, currentStock: 90 },
+    { name: 'Pantop DSR Capsule', salt: 'Pantoprazole+Domperidone', company: 'Aristo', category: 'Gastric', formulation: 'Capsule', packSize: '10 Capsules', mrp: 92.00, gstPercent: 12, barcode: 'MED007', rackLabel: 'C-1', reorderLevel: 15, currentStock: 120 },
+    { name: 'Pan-D Tablet', salt: 'Pantoprazole+Domperidone', company: 'Alkem', category: 'Gastric', formulation: 'Tablet', packSize: '10 Tablets', mrp: 85.00, gstPercent: 12, barcode: 'MED008', rackLabel: 'C-1', reorderLevel: 15, currentStock: 110 },
+    { name: 'Omeprazole 20mg', salt: 'Omeprazole', company: 'Dr Reddy', category: 'Gastric', formulation: 'Capsule', packSize: '10 Capsules', mrp: 35.00, gstPercent: 12, barcode: 'MED009', rackLabel: 'C-1', reorderLevel: 20, currentStock: 140 },
+    { name: 'Pantoprazole 40mg', salt: 'Pantoprazole', company: 'Sun Pharma', category: 'Gastric', formulation: 'Tablet', packSize: '10 Tablets', mrp: 55.00, gstPercent: 12, barcode: 'MED010', rackLabel: 'C-1', reorderLevel: 15, currentStock: 130 },
+    { name: 'Metformin 500mg', salt: 'Metformin', company: 'USV', category: 'Diabetic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 22.00, gstPercent: 12, barcode: 'MED011', rackLabel: 'D-1', reorderLevel: 30, currentStock: 250 },
+    { name: 'Glimepiride 1mg', salt: 'Glimepiride', company: 'Sun Pharma', category: 'Diabetic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 38.00, gstPercent: 12, barcode: 'MED012', rackLabel: 'D-1', reorderLevel: 20, currentStock: 180 },
+    { name: 'Atorvastatin 10mg', salt: 'Atorvastatin', company: 'Cipla', category: 'Cardiac', formulation: 'Tablet', packSize: '10 Tablets', mrp: 45.00, gstPercent: 12, barcode: 'MED013', rackLabel: 'D-2', reorderLevel: 25, currentStock: 200 },
+    { name: 'Amlodipine 5mg', salt: 'Amlodipine', company: 'Lupin', category: 'Cardiac', formulation: 'Tablet', packSize: '10 Tablets', mrp: 28.00, gstPercent: 12, barcode: 'MED014', rackLabel: 'D-2', reorderLevel: 25, currentStock: 190 },
+    { name: 'Telmisartan 40mg', salt: 'Telmisartan', company: 'Glenmark', category: 'Cardiac', formulation: 'Tablet', packSize: '10 Tablets', mrp: 52.00, gstPercent: 12, barcode: 'MED015', rackLabel: 'D-2', reorderLevel: 20, currentStock: 160 },
+    { name: 'Vitamin D3 60000 IU', salt: 'Cholecalciferol', company: 'Mankind', category: 'Vitamin', formulation: 'Capsule', packSize: '4 Capsules', mrp: 72.00, gstPercent: 5, barcode: 'MED016', rackLabel: 'E-1', reorderLevel: 15, currentStock: 100 },
+    { name: 'Zincovit Tablet', salt: 'Multivitamin+Zinc', company: 'Apex', category: 'Vitamin', formulation: 'Tablet', packSize: '15 Tablets', mrp: 145.00, gstPercent: 18, barcode: 'MED017', rackLabel: 'E-1', reorderLevel: 10, currentStock: 70 },
+    { name: 'Becosules Capsule', salt: 'Vitamin B Complex', company: 'Pfizer', category: 'Vitamin', formulation: 'Capsule', packSize: '20 Capsules', mrp: 35.00, gstPercent: 18, barcode: 'MED018', rackLabel: 'E-1', reorderLevel: 15, currentStock: 120 },
+    { name: 'Cetirizine 10mg', salt: 'Cetirizine', company: 'Cipla', category: 'Antiallergic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 18.00, gstPercent: 12, barcode: 'MED019', rackLabel: 'F-1', reorderLevel: 20, currentStock: 150 },
+    { name: 'Montelukast 10mg', salt: 'Montelukast', company: 'Sun Pharma', category: 'Antiallergic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 78.00, gstPercent: 12, barcode: 'MED020', rackLabel: 'F-1', reorderLevel: 15, currentStock: 90 },
+    { name: 'Levocet M Tablet', salt: 'Levocetirizine+Montelukast', company: 'Sun Pharma', category: 'Antiallergic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 95.00, gstPercent: 12, barcode: 'MED021', rackLabel: 'F-1', reorderLevel: 15, currentStock: 85 },
+    { name: 'Allegra 120mg', salt: 'Fexofenadine', company: 'Sanofi', category: 'Antiallergic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 135.00, gstPercent: 12, barcode: 'MED022', rackLabel: 'F-1', reorderLevel: 10, currentStock: 60 },
+    { name: 'Avil 25mg', salt: 'Pheniramine', company: 'Sanofi', category: 'Antiallergic', formulation: 'Tablet', packSize: '15 Tablets', mrp: 25.00, gstPercent: 12, barcode: 'MED023', rackLabel: 'F-2', reorderLevel: 20, currentStock: 140 },
+    { name: 'Loperamide 2mg', salt: 'Loperamide', company: 'Sun Pharma', category: 'Antidiarrheal', formulation: 'Capsule', packSize: '10 Capsules', mrp: 28.00, gstPercent: 12, barcode: 'MED024', rackLabel: 'G-1', reorderLevel: 15, currentStock: 80 },
+    { name: 'ORS Powder', salt: 'Oral Rehydration Salts', company: 'Cipla', category: 'Antidiarrheal', formulation: 'Powder', packSize: '21g', mrp: 8.50, gstPercent: 12, barcode: 'MED025', rackLabel: 'G-1', reorderLevel: 50, currentStock: 200 },
+    { name: 'Norflox TZ Tablet', salt: 'Norfloxacin+Tinidazole', company: 'Cipla', category: 'Antidiarrheal', formulation: 'Tablet', packSize: '10 Tablets', mrp: 42.00, gstPercent: 12, barcode: 'MED026', rackLabel: 'G-1', reorderLevel: 15, currentStock: 95 },
+    { name: 'Ibuprofen 400mg', salt: 'Ibuprofen', company: 'Abbott', category: 'Pain Relief', formulation: 'Tablet', packSize: '10 Tablets', mrp: 25.00, gstPercent: 12, barcode: 'MED027', rackLabel: 'A-2', reorderLevel: 25, currentStock: 170 },
+    { name: 'Diclofenac 50mg', salt: 'Diclofenac', company: 'Novartis', category: 'Pain Relief', formulation: 'Tablet', packSize: '10 Tablets', mrp: 18.00, gstPercent: 12, barcode: 'MED028', rackLabel: 'A-2', reorderLevel: 25, currentStock: 160 },
+    { name: 'Combiflam Tablet', salt: 'Ibuprofen+Paracetamol', company: 'Sanofi', category: 'Pain Relief', formulation: 'Tablet', packSize: '20 Tablets', mrp: 32.00, gstPercent: 12, barcode: 'MED029', rackLabel: 'A-2', reorderLevel: 20, currentStock: 180 },
+    { name: 'Aspirin 75mg', salt: 'Aspirin', company: 'Bayer', category: 'Cardiac', formulation: 'Tablet', packSize: '14 Tablets', mrp: 15.00, gstPercent: 12, barcode: 'MED030', rackLabel: 'D-3', reorderLevel: 30, currentStock: 220 },
+    { name: 'Clopidogrel 75mg', salt: 'Clopidogrel', company: 'Sun Pharma', category: 'Cardiac', formulation: 'Tablet', packSize: '10 Tablets', mrp: 68.00, gstPercent: 12, barcode: 'MED031', rackLabel: 'D-3', reorderLevel: 20, currentStock: 140 },
+    { name: 'Rosuvastatin 10mg', salt: 'Rosuvastatin', company: 'Sun Pharma', category: 'Cardiac', formulation: 'Tablet', packSize: '10 Tablets', mrp: 85.00, gstPercent: 12, barcode: 'MED032', rackLabel: 'D-3', reorderLevel: 15, currentStock: 110 },
+    { name: 'Lasix 40mg', salt: 'Furosemide', company: 'Sanofi', category: 'Diuretic', formulation: 'Tablet', packSize: '15 Tablets', mrp: 22.00, gstPercent: 12, barcode: 'MED033', rackLabel: 'H-1', reorderLevel: 20, currentStock: 130 },
+    { name: 'Ciprofloxacin 500mg', salt: 'Ciprofloxacin', company: 'Cipla', category: 'Antibiotic', formulation: 'Tablet', packSize: '10 Tablets', mrp: 38.00, gstPercent: 12, barcode: 'MED034', rackLabel: 'B-3', reorderLevel: 20, currentStock: 120 },
+    { name: 'Doxycycline 100mg', salt: 'Doxycycline', company: 'Sun Pharma', category: 'Antibiotic', formulation: 'Capsule', packSize: '10 Capsules', mrp: 42.00, gstPercent: 12, barcode: 'MED035', rackLabel: 'B-3', reorderLevel: 15, currentStock: 95 },
+    { name: 'Prednisolone 10mg', salt: 'Prednisolone', company: 'Wyeth', category: 'Steroid', formulation: 'Tablet', packSize: '10 Tablets', mrp: 28.00, gstPercent: 12, barcode: 'MED036', rackLabel: 'I-1', reorderLevel: 15, currentStock: 85 },
+    { name: 'Deriphyllin Tablet', salt: 'Theophylline+Etofylline', company: 'Zydus', category: 'Respiratory', formulation: 'Tablet', packSize: '10 Tablets', mrp: 32.00, gstPercent: 12, barcode: 'MED037', rackLabel: 'J-1', reorderLevel: 20, currentStock: 100 },
+    { name: 'Salbutamol Inhaler', salt: 'Salbutamol', company: 'Cipla', category: 'Respiratory', formulation: 'Inhaler', packSize: '200 Doses', mrp: 125.00, gstPercent: 12, barcode: 'MED038', rackLabel: 'J-1', reorderLevel: 10, currentStock: 45 },
+    { name: 'Budecort Inhaler', salt: 'Budesonide', company: 'Cipla', category: 'Respiratory', formulation: 'Inhaler', packSize: '200 Doses', mrp: 285.00, gstPercent: 12, barcode: 'MED039', rackLabel: 'J-1', reorderLevel: 8, currentStock: 30 },
+    { name: 'Cough Syrup 100ml', salt: 'Dextromethorphan', company: 'Sun Pharma', category: 'Cough & Cold', formulation: 'Syrup', packSize: '100ml', mrp: 65.00, gstPercent: 18, barcode: 'MED040', rackLabel: 'K-1', reorderLevel: 15, currentStock: 80 },
+    { name: 'Sinarest Tablet', salt: 'Chlorpheniramine+Paracetamol', company: 'Centaur', category: 'Cough & Cold', formulation: 'Tablet', packSize: '15 Tablets', mrp: 28.00, gstPercent: 12, barcode: 'MED041', rackLabel: 'K-1', reorderLevel: 20, currentStock: 140 },
+    { name: 'Vicks Vaporub 25g', salt: 'Camphor+Menthol', company: 'P&G', category: 'Cough & Cold', formulation: 'Ointment', packSize: '25g', mrp: 85.00, gstPercent: 18, barcode: 'MED042', rackLabel: 'K-1', reorderLevel: 15, currentStock: 90 },
+    { name: 'Digene Gel 200ml', salt: 'Magnesium Hydroxide', company: 'Abbott', category: 'Antacid', formulation: 'Gel', packSize: '200ml', mrp: 145.00, gstPercent: 18, barcode: 'MED043', rackLabel: 'C-2', reorderLevel: 10, currentStock: 60 },
+    { name: 'ENO Powder 5g', salt: 'Sodium Bicarbonate', company: 'GSK', category: 'Antacid', formulation: 'Powder', packSize: '5g', mrp: 10.00, gstPercent: 18, barcode: 'MED044', rackLabel: 'C-2', reorderLevel: 40, currentStock: 200 },
+    { name: 'Ranitidine 150mg', salt: 'Ranitidine', company: 'GSK', category: 'Antacid', formulation: 'Tablet', packSize: '10 Tablets', mrp: 22.00, gstPercent: 12, barcode: 'MED045', rackLabel: 'C-2', reorderLevel: 20, currentStock: 130 },
+    { name: 'Lactogen 1 (400g)', salt: 'Infant Formula', company: 'Nestle', category: 'Infant Care', formulation: 'Powder', packSize: '400g', mrp: 550.00, gstPercent: 0, barcode: 'MED046', rackLabel: 'L-1', reorderLevel: 5, currentStock: 25 },
+    { name: 'Cerelac (300g)', salt: 'Infant Cereal', company: 'Nestle', category: 'Infant Care', formulation: 'Powder', packSize: '300g', mrp: 190.00, gstPercent: 0, barcode: 'MED047', rackLabel: 'L-1', reorderLevel: 8, currentStock: 40 },
+    { name: 'Gripe Water 130ml', salt: 'Dill Oil', company: 'Woodwards', category: 'Infant Care', formulation: 'Liquid', packSize: '130ml', mrp: 78.00, gstPercent: 18, barcode: 'MED048', rackLabel: 'L-1', reorderLevel: 12, currentStock: 55 },
+    { name: 'Betadine Solution 100ml', salt: 'Povidone Iodine', company: 'Win Medicare', category: 'Antiseptic', formulation: 'Solution', packSize: '100ml', mrp: 112.00, gstPercent: 18, barcode: 'MED049', rackLabel: 'M-1', reorderLevel: 10, currentStock: 50 },
+    { name: 'Dettol Liquid 500ml', salt: 'Chloroxylenol', company: 'Reckitt', category: 'Antiseptic', formulation: 'Liquid', packSize: '500ml', mrp: 195.00, gstPercent: 18, barcode: 'MED050', rackLabel: 'M-1', reorderLevel: 8, currentStock: 45 },
+  ];
+
+  const insertedMeds = await Medicine.insertMany(medicines.map(m => ({ ...m, isActive: true })));
+
+  // Create batches for each medicine (2-3 batches per medicine)
+  const batches = [];
+  insertedMeds.forEach((med, i) => {
+    const batchCount = i % 3 === 0 ? 3 : 2;
+    for (let b = 0; b < batchCount; b++) {
+      batches.push({
+        medicineId: med._id,
+        batchNo: `B${String(240001 + i * 3 + b).padStart(6, '0')}`,
+        expiryDate: new Date(Date.now() + (300 + b * 100) * 86400000),
+        qty: Math.floor(med.currentStock / batchCount),
+        purchasePrice: med.mrp * 0.65,
+        mrp: med.mrp,
+        rackLabel: med.rackLabel,
+        isActive: true,
+      });
+    }
+  });
+  await MedicineBatch.insertMany(batches);
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Seed Customer data (20+ customers)
+// ────────────────────────────────────────────────────────────────────────────
+const seedCustomerData = async (db) => {
+  const Customer = getCustomerModel(db);
+  const count = await Customer.countDocuments();
+  if (count > 0) return;
+
+  const customers = [
+    { customerId: 'CUS001', name: 'Amit Kumar', phone: '9876543210', email: 'amit.kumar@email.com', gender: 'Male', dob: new Date('1985-03-15'), address: '123 MG Road, Delhi', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS002', name: 'Priya Sharma', phone: '9876543211', email: 'priya.sharma@email.com', gender: 'Female', dob: new Date('1990-07-22'), address: '456 Park Street, Mumbai', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS003', name: 'Rahul Verma', phone: '9876543212', email: 'rahul.verma@email.com', gender: 'Male', dob: new Date('1988-11-30'), address: '789 Brigade Road, Bangalore', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS004', name: 'Sneha Patel', phone: '9876543213', email: 'sneha.patel@email.com', gender: 'Female', dob: new Date('1992-05-18'), address: '321 CG Road, Ahmedabad', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS005', name: 'Rajesh Singh', phone: '9876543214', email: 'rajesh.singh@email.com', gender: 'Male', dob: new Date('1980-09-10'), address: '654 Civil Lines, Jaipur', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS006', name: 'Anjali Gupta', phone: '9876543215', email: 'anjali.gupta@email.com', gender: 'Female', dob: new Date('1995-01-25'), address: '987 Salt Lake, Kolkata', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS007', name: 'Vikram Reddy', phone: '9876543216', email: 'vikram.reddy@email.com', gender: 'Male', dob: new Date('1987-12-05'), address: '147 Banjara Hills, Hyderabad', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS008', name: 'Pooja Mehta', phone: '9876543217', email: 'pooja.mehta@email.com', gender: 'Female', dob: new Date('1993-08-14'), address: '258 Koramangala, Bangalore', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS009', name: 'Suresh Rao', phone: '9876543218', email: 'suresh.rao@email.com', gender: 'Male', dob: new Date('1982-04-20'), address: '369 Anna Nagar, Chennai', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS010', name: 'Kavita Joshi', phone: '9876543219', email: 'kavita.joshi@email.com', gender: 'Female', dob: new Date('1991-06-08'), address: '741 Shivaji Nagar, Pune', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS011', name: 'Manoj Tiwari', phone: '9876543220', email: 'manoj.tiwari@email.com', gender: 'Male', dob: new Date('1986-10-12'), address: '852 Gomti Nagar, Lucknow', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS012', name: 'Deepa Nair', phone: '9876543221', email: 'deepa.nair@email.com', gender: 'Female', dob: new Date('1994-02-28'), address: '963 MG Road, Kochi', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS013', name: 'Arun Kapoor', phone: '9876543222', email: 'arun.kapoor@email.com', gender: 'Male', dob: new Date('1989-07-16'), address: '159 Mall Road, Shimla', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS014', name: 'Meera Iyer', phone: '9876543223', email: 'meera.iyer@email.com', gender: 'Female', dob: new Date('1996-11-03'), address: '357 Jayanagar, Bangalore', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS015', name: 'Sanjay Desai', phone: '9876543224', email: 'sanjay.desai@email.com', gender: 'Male', dob: new Date('1984-03-27'), address: '486 FC Road, Pune', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS016', name: 'Ritu Bansal', phone: '9876543225', email: 'ritu.bansal@email.com', gender: 'Female', dob: new Date('1992-09-19'), address: '579 Connaught Place, Delhi', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS017', name: 'Naveen Kumar', phone: '9876543226', email: 'naveen.kumar@email.com', gender: 'Male', dob: new Date('1990-05-11'), address: '680 Indiranagar, Bangalore', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS018', name: 'Divya Rao', phone: '9876543227', email: 'divya.rao@email.com', gender: 'Female', dob: new Date('1988-12-24'), address: '791 Jubilee Hills, Hyderabad', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS019', name: 'Kiran Sethi', phone: '9876543228', email: 'kiran.sethi@email.com', gender: 'Male', dob: new Date('1987-08-06'), address: '892 Safdarjung, Delhi', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS020', name: 'Nisha Agarwal', phone: '9876543229', email: 'nisha.agarwal@email.com', gender: 'Female', dob: new Date('1995-04-15'), address: '903 Hazratganj, Lucknow', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS021', name: 'Rohit Malhotra', phone: '9876543230', email: 'rohit.malhotra@email.com', gender: 'Male', dob: new Date('1991-10-29'), address: '124 Model Town, Chandigarh', dueAmount: 0, totalPurchase: 0, isActive: true },
+    { customerId: 'CUS022', name: 'Swati Bhatt', phone: '9876543231', email: 'swati.bhatt@email.com', gender: 'Female', dob: new Date('1993-06-17'), address: '235 Aundh, Pune', dueAmount: 0, totalPurchase: 0, isActive: true },
+  ];
+
+  await Customer.insertMany(customers);
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Seed SaleInvoice data (30+ invoices for Sales reports)
+// ────────────────────────────────────────────────────────────────────────────
+const seedSaleInvoiceData = async (db) => {
+  const SaleInvoice = getSaleInvoiceModel(db);
+  const count = await SaleInvoice.countDocuments();
+  if (count > 0) return;
+
+  const customers = ['Amit Kumar', 'Priya Sharma', 'Rahul Verma', 'Sneha Patel', 'Rajesh Singh', 'Anjali Gupta', 'Walk-In Customer', 'Vikram Reddy', 'Pooja Mehta', 'Suresh Rao'];
+  const paymentModes = ['Cash', 'UPI', 'Card', 'Credit'];
+  const year = new Date().getFullYear();
+
+  const invoices = [];
+  for (let i = 0; i < 35; i++) {
+    const dayOffset = Math.floor(i / 5); // 5 invoices per day for last 7 days
+    const invoiceDate = new Date(Date.now() - dayOffset * 86400000);
+    invoiceDate.setHours(9 + (i % 12), (i * 13) % 60, 0, 0);
+
+    const itemCount = 2 + (i % 4); // 2-5 items per invoice
+    const items = [];
+    let subtotal = 0;
+
+    const medicines = [
+      { name: 'Dolo 650 Tablet', qty: 2, mrp: 32.50, gst: 12 },
+      { name: 'Crocin 650 Tablet', qty: 1, mrp: 28.00, gst: 12 },
+      { name: 'Azithral 500 Tablet', qty: 1, mrp: 85.00, gst: 12 },
+      { name: 'Pantop DSR Capsule', qty: 1, mrp: 92.00, gst: 12 },
+      { name: 'Augmentin 625', qty: 1, mrp: 225.00, gst: 12 },
+      { name: 'Metformin 500mg', qty: 3, mrp: 22.00, gst: 12 },
+      { name: 'Atorvastatin 10mg', qty: 2, mrp: 45.00, gst: 12 },
+      { name: 'Omeprazole 20mg', qty: 1, mrp: 35.00, gst: 12 },
+      { name: 'Cetirizine 10mg', qty: 2, mrp: 18.00, gst: 12 },
+      { name: 'Vitamin D3 60000 IU', qty: 1, mrp: 72.00, gst: 5 },
+      { name: 'Zincovit Tablet', qty: 1, mrp: 145.00, gst: 18 },
+      { name: 'Calpol 650 Tablet', qty: 2, mrp: 30.00, gst: 12 },
+      { name: 'Ibuprofen 400mg', qty: 2, mrp: 25.00, gst: 12 },
+      { name: 'Amoxicillin 500mg', qty: 2, mrp: 65.00, gst: 12 },
+      { name: 'Pan-D Tablet', qty: 1, mrp: 85.00, gst: 12 },
+    ];
+
+    for (let j = 0; j < itemCount; j++) {
+      const med = medicines[(i * 3 + j) % medicines.length];
+      const itemAmt = med.qty * med.mrp;
+      subtotal += itemAmt;
+      items.push({
+        medicineName: med.name,
+        qty: med.qty,
+        mrp: med.mrp,
+        gstPct: med.gst,
+        amount: itemAmt,
+      });
+    }
+
+    const discountPct = i % 5 === 0 ? 10 : i % 7 === 0 ? 5 : 0;
+    const discountAmt = (subtotal * discountPct) / 100;
+    const afterDiscount = subtotal - discountAmt;
+    const gstAmt = afterDiscount * 0.12; // Average 12% GST
+    const totalAmt = afterDiscount + gstAmt;
+
+    const paymentMode = paymentModes[i % paymentModes.length];
+    const isPaid = paymentMode !== 'Credit';
+
+    invoices.push({
+      invoiceNo: `INV-${year}-${String(1500 + i).padStart(4, '0')}`,
+      invoiceDate,
+      customerName: customers[i % customers.length],
+      items,
+      subtotal,
+      discountAmt,
+      gstAmt,
+      totalAmt,
+      paymentMode,
+      paidAmt: isPaid ? totalAmt : totalAmt * 0.5,
+      dueAmt: isPaid ? 0 : totalAmt * 0.5,
+      status: 'Completed',
+      isReturn: false,
+      cashierName: 'Admin',
+    });
+  }
+
+  // Add 3 return invoices
+  for (let i = 0; i < 3; i++) {
+    const returnDate = new Date(Date.now() - (i + 1) * 86400000);
+    returnDate.setHours(14 + i, 30, 0, 0);
+    
+    invoices.push({
+      invoiceNo: `INV-${year}-R${String(101 + i).padStart(3, '0')}`,
+      invoiceDate: returnDate,
+      customerName: customers[i],
+      items: [
+        { medicineName: 'Dolo 650 Tablet', qty: -1, mrp: 32.50, gstPct: 12, amount: -32.50 },
+        { medicineName: 'Pantop DSR Capsule', qty: -1, mrp: 92.00, gstPct: 12, amount: -92.00 },
+      ],
+      subtotal: -124.50,
+      discountAmt: 0,
+      gstAmt: -14.94,
+      totalAmt: -139.44,
+      paymentMode: 'Cash',
+      paidAmt: -139.44,
+      dueAmt: 0,
+      status: 'Completed',
+      isReturn: true,
+      cashierName: 'Admin',
+    });
+  }
+
+  await SaleInvoice.insertMany(invoices);
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/pos/medicines/search?q=&category=&company=&page=
 // Search medicines for POS billing (name/salt/barcode)
 // ────────────────────────────────────────────────────────────────────────────
 export const searchMedicines = asyncHandler(async (req, res) => {
+  await seedMedicineData(req.db);
   const { q = '', category = '', company = '', page = 1, limit = 20 } = req.query;
   const Medicine = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
@@ -67,6 +297,7 @@ export const searchMedicines = asyncHandler(async (req, res) => {
 // Get medicine by barcode/batch number
 // ────────────────────────────────────────────────────────────────────────────
 export const getMedicineByBarcode = asyncHandler(async (req, res) => {
+  await seedMedicineData(req.db);
   const { barcode } = req.params;
   const Medicine = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
@@ -113,6 +344,7 @@ export const getMedicineByBarcode = asyncHandler(async (req, res) => {
 // Search customers for POS
 // ────────────────────────────────────────────────────────────────────────────
 export const searchCustomers = asyncHandler(async (req, res) => {
+  await seedCustomerData(req.db);
   const { q = '', page = 1, limit = 20 } = req.query;
   const Customer = getCustomerModel(req.db);
 
@@ -303,6 +535,21 @@ export const createSaleInvoice = asyncHandler(async (req, res) => {
 export const getSaleInvoice = asyncHandler(async (req, res) => {
   const SaleInvoice = getSaleInvoiceModel(req.db);
   const invoice = await SaleInvoice.findById(req.params.id).lean();
+  if (!invoice) return res.status(404).json(new apiResponse(404, null, 'Invoice not found'));
+  return res.status(200).json(new apiResponse(200, invoice, 'Invoice fetched'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/sales/invoice-by-no/:invoiceNo
+// Get invoice by invoice number (used by ReturnBill + ExchangeBill)
+// ────────────────────────────────────────────────────────────────────────────
+export const getSaleInvoiceByNo = asyncHandler(async (req, res) => {
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+  const invoice = await SaleInvoice.findOne({
+    invoiceNo: req.params.invoiceNo,
+    isReturn:  false,
+    status:    { $nin: ['Returned', 'Cancelled'] },
+  }).lean();
   if (!invoice) return res.status(404).json(new apiResponse(404, null, 'Invoice not found'));
   return res.status(200).json(new apiResponse(200, invoice, 'Invoice fetched'));
 });
