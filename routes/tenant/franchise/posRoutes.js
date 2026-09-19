@@ -9,6 +9,7 @@ import {
   deleteHoldBill,
   createSaleInvoice,
   getSaleInvoice,
+  getSaleInvoiceByNo,
   createReturnBill,
   createExchangeBill,
   createCreditSale,
@@ -32,11 +33,12 @@ router.post('/hold-bills',                createHoldBill);
 router.delete('/hold-bills/:id',          deleteHoldBill);
 
 // ── Sale Invoices ──────────────────────────────────────────────────
-router.post('/sales/invoice',             createSaleInvoice);
-router.get('/sales/invoice/:id',          getSaleInvoice);
-router.post('/sales/returns',             createReturnBill);
-router.post('/sales/exchange',            createExchangeBill);
-router.post('/sales/credit-sale',         createCreditSale);
+router.post('/sales/invoice',                 createSaleInvoice);
+router.get('/sales/invoice/:id',              getSaleInvoice);
+router.get('/sales/invoice-by-no/:invoiceNo', getSaleInvoiceByNo);
+router.post('/sales/returns',                 createReturnBill);
+router.post('/sales/exchange',                createExchangeBill);
+router.post('/sales/credit-sale',             createCreditSale);
 
 // ── Day Closing ────────────────────────────────────────────────────
 router.get('/day-closing/summary',        getDayClosingSummary);

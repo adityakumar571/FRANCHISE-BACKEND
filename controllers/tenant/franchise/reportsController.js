@@ -5,6 +5,7 @@ import { getSaleInvoiceModel } from '../../../models/tenant/franchise/SaleInvoic
 import { getPurchaseInvoiceModel } from '../../../models/tenant/franchise/PurchaseInvoice.model.js';
 import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.model.js';
 import { getMedicineBatchModel } from '../../../models/tenant/franchise/MedicineBatch.model.js';
+import { getCustomerModel } from '../../../models/tenant/franchise/Customer.model.js';
 
 const dateRange = (from, to) => {
   const s = from ? new Date(from) : new Date(new Date().setDate(1));
@@ -15,9 +16,97 @@ const dateRange = (from, to) => {
 
 // ── GET /api/franchise/reports/sales?from=&to=&page=
 export const getSalesReport = asyncHandler(async (req, res) => {
+  // Seed sale invoice data if empty
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+  const count = await SaleInvoice.countDocuments();
+  if (count === 0) {
+    // Call seedSaleInvoiceData directly inline since we can't import it
+    const customers = ['Amit Kumar', 'Priya Sharma', 'Rahul Verma', 'Sneha Patel', 'Rajesh Singh', 'Anjali Gupta', 'Walk-In Customer', 'Vikram Reddy', 'Pooja Mehta', 'Suresh Rao'];
+    const paymentModes = ['Cash', 'UPI', 'Card', 'Credit'];
+    const year = new Date().getFullYear();
+    const invoices = [];
+    for (let i = 0; i < 35; i++) {
+      const dayOffset = Math.floor(i / 5);
+      const invoiceDate = new Date(Date.now() - dayOffset * 86400000);
+      invoiceDate.setHours(9 + (i % 12), (i * 13) % 60, 0, 0);
+      const itemCount = 2 + (i % 4);
+      const items = [];
+      let subtotal = 0;
+      const medicines = [
+        { name: 'Dolo 650 Tablet', qty: 2, mrp: 32.50, gst: 12 },
+        { name: 'Crocin 650 Tablet', qty: 1, mrp: 28.00, gst: 12 },
+        { name: 'Azithral 500 Tablet', qty: 1, mrp: 85.00, gst: 12 },
+        { name: 'Pantop DSR Capsule', qty: 1, mrp: 92.00, gst: 12 },
+        { name: 'Augmentin 625', qty: 1, mrp: 225.00, gst: 12 },
+        { name: 'Metformin 500mg', qty: 3, mrp: 22.00, gst: 12 },
+        { name: 'Atorvastatin 10mg', qty: 2, mrp: 45.00, gst: 12 },
+        { name: 'Omeprazole 20mg', qty: 1, mrp: 35.00, gst: 12 },
+        { name: 'Cetirizine 10mg', qty: 2, mrp: 18.00, gst: 12 },
+        { name: 'Vitamin D3 60000 IU', qty: 1, mrp: 72.00, gst: 5 },
+        { name: 'Zincovit Tablet', qty: 1, mrp: 145.00, gst: 18 },
+        { name: 'Calpol 650 Tablet', qty: 2, mrp: 30.00, gst: 12 },
+        { name: 'Ibuprofen 400mg', qty: 2, mrp: 25.00, gst: 12 },
+        { name: 'Amoxicillin 500mg', qty: 2, mrp: 65.00, gst: 12 },
+        { name: 'Pan-D Tablet', qty: 1, mrp: 85.00, gst: 12 },
+      ];
+      for (let j = 0; j < itemCount; j++) {
+        const med = medicines[(i * 3 + j) % medicines.length];
+        const itemAmt = med.qty * med.mrp;
+        subtotal += itemAmt;
+        items.push({ medicineName: med.name, qty: med.qty, mrp: med.mrp, gstPct: med.gst, amount: itemAmt });
+      }
+      const discountPct = i % 5 === 0 ? 10 : i % 7 === 0 ? 5 : 0;
+      const discountAmt = (subtotal * discountPct) / 100;
+      const afterDiscount = subtotal - discountAmt;
+      const gstAmt = afterDiscount * 0.12;
+      const totalAmt = afterDiscount + gstAmt;
+      const paymentMode = paymentModes[i % paymentModes.length];
+      const isPaid = paymentMode !== 'Credit';
+      invoices.push({
+        invoiceNo: `INV-${year}-${String(1500 + i).padStart(4, '0')}`,
+        invoiceDate,
+        customerName: customers[i % customers.length],
+        items,
+        subtotal,
+        discountAmt,
+        gstAmt,
+        totalAmt,
+        paymentMode,
+        paidAmt: isPaid ? totalAmt : totalAmt * 0.5,
+        dueAmt: isPaid ? 0 : totalAmt * 0.5,
+        status: 'Completed',
+        isReturn: false,
+        cashierName: 'Admin',
+      });
+    }
+    for (let i = 0; i < 3; i++) {
+      const returnDate = new Date(Date.now() - (i + 1) * 86400000);
+      returnDate.setHours(14 + i, 30, 0, 0);
+      invoices.push({
+        invoiceNo: `INV-${year}-R${String(101 + i).padStart(3, '0')}`,
+        invoiceDate: returnDate,
+        customerName: customers[i],
+        items: [
+          { medicineName: 'Dolo 650 Tablet', qty: -1, mrp: 32.50, gstPct: 12, amount: -32.50 },
+          { medicineName: 'Pantop DSR Capsule', qty: -1, mrp: 92.00, gstPct: 12, amount: -92.00 },
+        ],
+        subtotal: -124.50,
+        discountAmt: 0,
+        gstAmt: -14.94,
+        totalAmt: -139.44,
+        paymentMode: 'Cash',
+        paidAmt: -139.44,
+        dueAmt: 0,
+        status: 'Completed',
+        isReturn: true,
+        cashierName: 'Admin',
+      });
+    }
+    await SaleInvoice.insertMany(invoices);
+  }
+  
   const { from, to, page = 1, limit = 20 } = req.query;
   const range = dateRange(from, to);
-  const SaleInvoice = getSaleInvoiceModel(req.db);
 
   const [invoices, total, kpiAgg] = await Promise.all([
     SaleInvoice.find({ invoiceDate: range, status: { $ne: 'Cancelled' } })

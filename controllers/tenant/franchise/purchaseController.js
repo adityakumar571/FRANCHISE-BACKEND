@@ -10,6 +10,30 @@ import { getMedicineBatchModel } from '../../../models/tenant/franchise/Medicine
 import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.model.js';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Seed Supplier Data
+// ────────────────────────────────────────────────────────────────────────────
+const seedSupplierData = async (db) => {
+  const Supplier = getSupplierModel(db);
+  const count = await Supplier.countDocuments();
+  if (count > 0) return;
+
+  await Supplier.insertMany([
+    { supplierCode: 'SUP001', supplierName: 'Medico Agencies', contactPerson: 'Rajesh Kumar', phone: '9876543210', email: 'rajesh@medicoagencies.com', address: '123, Medical Complex, Delhi - 110001', gstNo: '07AAAAA1234A1Z5', dlNo: 'DL-20-2024-00123', creditDays: 30, creditLimit: 500000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP002', supplierName: 'PharmaDist Pvt Ltd', contactPerson: 'Amit Sharma', phone: '9876543211', email: 'amit@pharmadist.com', address: '456, Pharma Hub, Mumbai - 400001', gstNo: '27BBBBB5678B2Z6', dlNo: 'MH-22-2024-00456', creditDays: 45, creditLimit: 750000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP003', supplierName: 'SunPharma Dist', contactPerson: 'Priya Singh', phone: '9876543212', email: 'priya@sunpharma.com', address: '789, Sun Tower, Bengaluru - 560001', gstNo: '29CCCCC9012C3Z7', dlNo: 'KA-25-2024-00789', creditDays: 30, creditLimit: 600000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP004', supplierName: 'Apex Distributors', contactPerson: 'Vikram Reddy', phone: '9876543213', email: 'vikram@apexdist.com', address: '321, Apex Plaza, Hyderabad - 500001', gstNo: '36DDDDD3456D4Z8', dlNo: 'TS-28-2024-00321', creditDays: 60, creditLimit: 400000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP005', supplierName: 'HealthCare Suppliers', contactPerson: 'Sneha Patel', phone: '9876543214', email: 'sneha@healthcare.com', address: '654, Health Center, Pune - 411001', gstNo: '27EEEEE6789E5Z9', dlNo: 'MH-30-2024-00654', creditDays: 30, creditLimit: 350000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP006', supplierName: 'Cipla Distributors', contactPerson: 'Ravi Verma', phone: '9876543215', email: 'ravi@cipladist.com', address: '987, Cipla Tower, Ahmedabad - 380001', gstNo: '24FFFFF0123F6Z0', dlNo: 'GJ-32-2024-00987', creditDays: 45, creditLimit: 800000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP007', supplierName: 'Dr Reddys Supplies', contactPerson: 'Anjali Nair', phone: '9876543216', email: 'anjali@drreddys.com', address: '147, Reddy Complex, Chennai - 600001', gstNo: '33GGGGG4567G7Z1', dlNo: 'TN-35-2024-00147', creditDays: 30, creditLimit: 550000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP008', supplierName: 'Lupin Agencies', contactPerson: 'Karan Joshi', phone: '9876543217', email: 'karan@lupinagencies.com', address: '258, Lupin Plaza, Kolkata - 700001', gstNo: '19HHHHH7890H8Z2', dlNo: 'WB-38-2024-00258', creditDays: 60, creditLimit: 700000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP009', supplierName: 'Torrent Pharma Dist', contactPerson: 'Neha Gupta', phone: '9876543218', email: 'neha@torrentdist.com', address: '369, Torrent Tower, Jaipur - 302001', gstNo: '08IIIII2345I9Z3', dlNo: 'RJ-40-2024-00369', creditDays: 30, creditLimit: 450000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP010', supplierName: 'Zydus Healthcare', contactPerson: 'Arjun Mehta', phone: '9876543219', email: 'arjun@zydus.com', address: '741, Zydus Center, Surat - 395001', gstNo: '24JJJJJ5678J0Z4', dlNo: 'GJ-42-2024-00741', creditDays: 45, creditLimit: 650000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP011', supplierName: 'Alkem Labs Dist', contactPerson: 'Pooja Kapoor', phone: '9876543220', email: 'pooja@alkemdist.com', address: '852, Alkem Hub, Chandigarh - 160001', gstNo: '04KKKKK8901K1Z5', dlNo: 'CH-45-2024-00852', creditDays: 30, creditLimit: 500000, outstanding: 0, status: 'Active' },
+    { supplierCode: 'SUP012', supplierName: 'Glenmark Suppliers', contactPerson: 'Rohit Bansal', phone: '9876543221', email: 'rohit@glenmark.com', address: '963, Glenmark Plaza, Indore - 452001', gstNo: '23LLLLL1234L2Z6', dlNo: 'MP-48-2024-00963', creditDays: 60, creditLimit: 600000, outstanding: 0, status: 'Active' },
+  ]);
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // Seed dummy Purchase Orders and GRNs
 // ────────────────────────────────────────────────────────────────────────────
 const seedPurchaseData = async (db) => {
@@ -43,6 +67,7 @@ const seedPurchaseData = async (db) => {
 // Purchase dashboard KPIs, chart, payment breakdown
 // ────────────────────────────────────────────────────────────────────────────
 export const getPurchaseDashboard = asyncHandler(async (req, res) => {
+  await seedSupplierData(req.db);
   await seedPurchaseData(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
 
@@ -543,4 +568,47 @@ export const getPurchaseLiveRate = asyncHandler(async (req, res) => {
   }));
 
   return res.status(200).json(new apiResponse(200, { medicines: result, total: result.length }, 'Live rates fetched'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/purchase/supplier-ledger
+// Get all suppliers with outstanding balance summary
+// ────────────────────────────────────────────────────────────────────────────
+export const getSupplierLedgerSummary = asyncHandler(async (req, res) => {
+  await seedSupplierData(req.db);
+  const Supplier = getSupplierModel(req.db);
+  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+
+  // Get all active suppliers
+  const suppliers = await Supplier.find({ isActive: true }).lean();
+
+  // Calculate outstanding for each supplier from purchase invoices
+  const summary = await Promise.all(
+    suppliers.map(async (s) => {
+      const agg = await PurchaseInvoice.aggregate([
+        { $match: { supplierId: s._id, status: { $nin: ['Cancelled', 'Returned'] } } },
+        { $group: {
+          _id: null,
+          totalPurchase: { $sum: '$totalAmt' },
+          totalPaid:     { $sum: '$paidAmt' },
+        }},
+      ]);
+      const { totalPurchase = 0, totalPaid = 0 } = agg[0] || {};
+      const outstanding = totalPurchase - totalPaid;
+      
+      return {
+        _id: s._id,
+        name: s.name,
+        contactPerson: s.contactPerson || '',
+        phone: s.phone || '',
+        outstanding,
+        lastPurchase: s.lastPurchaseDate || null,
+      };
+    })
+  );
+
+  // Sort by outstanding desc
+  summary.sort((a, b) => b.outstanding - a.outstanding);
+
+  return res.status(200).json(new apiResponse(200, summary, 'Supplier ledger summary fetched'));
 });

@@ -12,6 +12,7 @@ import {
   getGRNById,
   getPurchaseReturns,
   createPurchaseReturn,
+  getSupplierLedgerSummary,
 } from '../../../controllers/tenant/franchise/purchaseController.js';
 
 const router = express.Router();
@@ -35,5 +36,8 @@ router.get('/grn/:id',                getGRNById);
 // Purchase Returns
 router.get('/returns',                getPurchaseReturns);
 router.post('/returns',               createPurchaseReturn);
+
+// Supplier Ledger Summary
+router.get('/supplier-ledger',        getSupplierLedgerSummary);
 
 export default router;
