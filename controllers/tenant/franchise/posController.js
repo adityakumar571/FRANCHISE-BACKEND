@@ -569,3 +569,153 @@ export const submitDayClosing = asyncHandler(async (req, res) => {
     cashDifference: cashDiff,
   }, 'Day closed successfully'));
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/invoices?page=&limit=&from=&to=&status=
+// List all sale invoices with pagination (for Billing history page)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getPosInvoices = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, from, to, status, search = '' } = req.query;
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+
+  const filter = {};
+  if (status && status !== 'All') filter.status = status;
+  if (search) filter.$or = [
+    { invoiceNo:    new RegExp(search, 'i') },
+    { customerName: new RegExp(search, 'i') },
+  ];
+  if (from || to) {
+    filter.invoiceDate = {};
+    if (from) { const d = new Date(from); d.setHours(0,0,0,0);  filter.invoiceDate.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23,59,59,999); filter.invoiceDate.$lte = d; }
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [invoices, total] = await Promise.all([
+    SaleInvoice.find(filter).sort({ invoiceDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    SaleInvoice.countDocuments(filter),
+  ]);
+
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todaySales = await SaleInvoice.aggregate([
+    { $match: { invoiceDate: { $gte: todayStart }, status: { $ne: 'Cancelled' } } },
+    { $group: { _id: null, total: { $sum: '$totalAmt' }, count: { $sum: 1 } } },
+  ]);
+
+  return res.status(200).json(new apiResponse(200, {
+    invoices: invoices.map(inv => ({
+      _id:          inv._id,
+      invoiceNo:    inv.invoiceNo,
+      customerName: inv.customerName || 'Walk-in Customer',
+      customerPhone:inv.customerPhone || '',
+      invoiceDate:  inv.invoiceDate,
+      totalAmt:     inv.totalAmt,
+      discount:     inv.discount || 0,
+      netAmt:       inv.netAmt   || inv.totalAmt,
+      paymentMode:  inv.paymentMode || 'Cash',
+      status:       inv.status || 'Completed',
+      items:        inv.items?.length || 0,
+    })),
+    total,
+    totalPages:  Math.ceil(total / Number(limit)),
+    currentPage: Number(page),
+    todaySales:  todaySales[0]?.total || 0,
+    todayCount:  todaySales[0]?.count || 0,
+  }, 'Invoices fetched'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/orders?page=&limit=&status=
+// List all orders (alias for invoices — used by Orders.jsx)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getPosOrders = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, status, search = '' } = req.query;
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+
+  const filter = {};
+  if (status && status !== 'All') filter.status = status;
+  if (search) filter.$or = [
+    { invoiceNo:    new RegExp(search, 'i') },
+    { customerName: new RegExp(search, 'i') },
+  ];
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [orders, total] = await Promise.all([
+    SaleInvoice.find(filter).sort({ invoiceDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    SaleInvoice.countDocuments(filter),
+  ]);
+
+  return res.status(200).json(new apiResponse(200, {
+    orders: orders.map(o => ({
+      _id:          o._id,
+      orderId:      o.invoiceNo,
+      customerName: o.customerName || 'Walk-in Customer',
+      date:         o.invoiceDate,
+      amount:       o.netAmt || o.totalAmt,
+      paymentMode:  o.paymentMode || 'Cash',
+      status:       o.status || 'Completed',
+      items:        o.items?.length || 0,
+    })),
+    total,
+    totalPages: Math.ceil(total / Number(limit)),
+  }, 'Orders fetched'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/sales/invoice-by-no/:invoiceNo
+// Look up invoice by invoice number string (for Return/Exchange)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getSaleInvoiceByNumber = asyncHandler(async (req, res) => {
+  const { invoiceNo } = req.params;
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+
+  const invoice = await SaleInvoice.findOne({
+    invoiceNo: { $regex: new RegExp(`^${invoiceNo}$`, 'i') },
+  }).lean();
+
+  if (!invoice) {
+    return res.status(404).json(new apiResponse(404, null, `Invoice ${invoiceNo} not found`));
+  }
+
+  return res.status(200).json(new apiResponse(200, invoice, 'Invoice fetched'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/sales/returns?page=&limit=&from=&to=
+// List all return bills
+// ─────────────────────────────────────────────────────────────────────────────
+export const getSalesReturnsList = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, from, to, search = '' } = req.query;
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+
+  const filter = { status: 'Returned' };
+  if (search) filter.$or = [
+    { invoiceNo:    new RegExp(search, 'i') },
+    { customerName: new RegExp(search, 'i') },
+  ];
+  if (from || to) {
+    filter.invoiceDate = {};
+    if (from) { const d = new Date(from); d.setHours(0,0,0,0);  filter.invoiceDate.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23,59,59,999); filter.invoiceDate.$lte = d; }
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [returns, total] = await Promise.all([
+    SaleInvoice.find(filter).sort({ invoiceDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    SaleInvoice.countDocuments(filter),
+  ]);
+
+  return res.status(200).json(new apiResponse(200, {
+    returns: returns.map(r => ({
+      _id:         r._id,
+      invoiceNo:   r.invoiceNo,
+      returnDate:  r.updatedAt || r.invoiceDate,
+      customerName:r.customerName || 'Walk-in',
+      amount:      r.netAmt || r.totalAmt,
+      items:       r.items?.length || 0,
+      reason:      r.returnReason || '—',
+    })),
+    total,
+    totalPages: Math.ceil(total / Number(limit)),
+  }, 'Sales returns fetched'));
+});

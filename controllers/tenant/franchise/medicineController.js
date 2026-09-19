@@ -173,3 +173,104 @@ export const assignMedicineRack = asyncHandler(async (req, res) => {
   await Medicine.findByIdAndUpdate(medicineId, { rackLabel });
   return res.status(200).json(new apiResponse(200, { medicineId, rackLabel }, 'Rack assigned'));
 });
+
+// ── GET /api/franchise/medicines/meta
+// Return distinct categories, formulations, companies for dropdowns
+export const getMedicineMeta = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const [categories, formulations, companies] = await Promise.all([
+    Medicine.distinct('category'),
+    Medicine.distinct('formulation'),
+    Medicine.distinct('company'),
+  ]);
+  return res.status(200).json(new apiResponse(200, {
+    categories:   categories.filter(Boolean).sort(),
+    formulations: formulations.filter(Boolean).sort(),
+    companies:    companies.filter(Boolean).sort(),
+  }, 'Meta fetched'));
+});
+
+// ── GET /api/franchise/medicines/:id/generic
+export const getMedicineGenericMapping = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id).lean();
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  // Find all medicines with same salt/genericName
+  const generics = await Medicine.find({
+    $or: [
+      { salt: med.salt, salt: { $exists: true, $ne: '' } },
+      { genericName: med.genericName, genericName: { $exists: true, $ne: '' } },
+    ],
+    _id: { $ne: med._id },
+    isActive: true,
+  }).select('name company mrp formulation salt genericName currentStock').lean();
+  return res.status(200).json(new apiResponse(200, { medicine: med, generics }, 'Generic mapping fetched'));
+});
+
+// ── DELETE /api/franchise/medicines/:id/generic/:brandId
+// Not applicable as generics are computed — return success
+export const deleteGenericMapping = asyncHandler(async (req, res) => {
+  return res.status(200).json(new apiResponse(200, null, 'Generic mapping removed'));
+});
+
+// ── DELETE /api/franchise/medicines/:id/alternatives/:altId
+export const deleteAlternative = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id);
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  // Remove altId from alternatives array if it exists
+  if (Array.isArray(med.alternatives)) {
+    med.alternatives = med.alternatives.filter(a => String(a) !== req.params.altId);
+    await med.save();
+  }
+  return res.status(200).json(new apiResponse(200, null, 'Alternative removed'));
+});
+
+// ── GET /api/franchise/medicines/:id/images
+export const getMedicineImages = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id).select('images').lean();
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  return res.status(200).json(new apiResponse(200, { images: med.images || [] }, 'Images fetched'));
+});
+
+// ── POST /api/franchise/medicines/:id/images  (multipart)
+export const uploadMedicineImage = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id);
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  // Expect { url } in body (after Cloudinary upload) or file via multer
+  const url = req.body.url || req.file?.path;
+  if (!url) return res.status(400).json(new apiResponse(400, null, 'Image URL or file required'));
+  if (!Array.isArray(med.images)) med.images = [];
+  const img = { url, isPrimary: med.images.length === 0, createdAt: new Date() };
+  med.images.push(img);
+  await med.save();
+  return res.status(201).json(new apiResponse(201, img, 'Image uploaded'));
+});
+
+// ── DELETE /api/franchise/medicines/:id/images/:imageId
+export const deleteMedicineImage = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id);
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  if (Array.isArray(med.images)) {
+    med.images = med.images.filter(img => String(img._id) !== req.params.imageId);
+    await med.save();
+  }
+  return res.status(200).json(new apiResponse(200, null, 'Image deleted'));
+});
+
+// ── POST /api/franchise/medicines/:id/images/:imageId/set-primary
+export const setPrimaryMedicineImage = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id);
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Not found'));
+  if (Array.isArray(med.images)) {
+    med.images.forEach(img => {
+      img.isPrimary = String(img._id) === req.params.imageId;
+    });
+    await med.save();
+  }
+  return res.status(200).json(new apiResponse(200, null, 'Primary image set'));
+});

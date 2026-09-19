@@ -431,3 +431,116 @@ export const createPurchaseReturn = asyncHandler(async (req, res) => {
 
   return res.status(201).json(new apiResponse(201, { _id: ret._id, returnNo: ret.returnNo }, 'Purchase return submitted'));
 });
+
+// ── GET /api/franchise/purchase/supplier-ledger?supplierId=&from=&to=&page=&limit=
+export const getPurchaseSupplierLedger = asyncHandler(async (req, res) => {
+  const { supplierId, from, to, page = 1, limit = 20 } = req.query;
+  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const Supplier        = getSupplierModel(req.db);
+
+  const filter = {};
+  if (supplierId) filter.supplierId = supplierId;
+  if (from || to) {
+    filter.billDate = {};
+    if (from) { const d = new Date(from); d.setHours(0,0,0,0);      filter.billDate.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23,59,59,999); filter.billDate.$lte = d; }
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [invoices, total] = await Promise.all([
+    PurchaseInvoice.find(filter).sort({ billDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    PurchaseInvoice.countDocuments(filter),
+  ]);
+
+  // Aggregate totals
+  const agg = await PurchaseInvoice.aggregate([
+    { $match: filter },
+    { $group: { _id: null, totalPurchase: { $sum: '$totalAmt' }, totalPaid: { $sum: '$paidAmt' }, totalDue: { $sum: '$dueAmt' } } },
+  ]);
+
+  // Get supplier list for dropdown
+  const suppliers = await Supplier.find({ isActive: true }).select('_id name supplierCode').lean();
+
+  return res.status(200).json(new apiResponse(200, {
+    entries: invoices.map(inv => ({
+      _id:          inv._id,
+      date:         new Date(inv.billDate).toLocaleDateString('en-IN'),
+      billNo:       inv.billNo,
+      supplierName: inv.supplierName || '—',
+      totalAmt:     inv.totalAmt,
+      paidAmt:      inv.paidAmt || 0,
+      dueAmt:       inv.dueAmt  || inv.totalAmt - (inv.paidAmt || 0),
+      status:       inv.status,
+      paymentMode:  inv.paymentMode || '—',
+    })),
+    total,
+    totalPages:    Math.ceil(total / Number(limit)),
+    summary:       agg[0] || { totalPurchase: 0, totalPaid: 0, totalDue: 0 },
+    suppliers:     suppliers.map(s => ({ _id: s._id, name: s.name, code: s.supplierCode })),
+  }, 'Purchase supplier ledger fetched'));
+});
+
+// ── GET /api/franchise/purchase/live-rate?medicine=&supplierId=
+// Compare live rates for a medicine across suppliers in purchase context
+export const getPurchaseLiveRate = asyncHandler(async (req, res) => {
+  const { medicine = '', supplierId } = req.query;
+  const Medicine  = getMedicineModel(req.db);
+  const Supplier  = getSupplierModel(req.db);
+  const MedBatch  = getMedicineBatchModel(req.db);
+
+  // Find matching medicines
+  const meds = await Medicine.find(
+    medicine
+      ? { $or: [{ name: new RegExp(medicine, 'i') }, { salt: new RegExp(medicine, 'i') }], isActive: true }
+      : { isActive: true }
+  ).limit(20).lean();
+
+  // For each medicine, get batch pricing from different suppliers
+  const result = await Promise.all(meds.map(async (med) => {
+    const batches = await MedBatch.find({ medicineId: med._id, qty: { $gt: 0 } })
+      .sort({ purchasePrice: 1 }).lean();
+
+    // Get unique suppliers from batches
+    const supplierRates = [];
+    const seenSuppliers = new Set();
+    for (const batch of batches) {
+      const supId = String(batch.supplierId || '');
+      if (!seenSuppliers.has(supId) && supId) {
+        seenSuppliers.add(supId);
+        const sup = await Supplier.findById(batch.supplierId).select('name').lean();
+        supplierRates.push({
+          supplierId:    batch.supplierId,
+          supplierName:  sup?.name || 'Unknown',
+          purchasePrice: batch.purchasePrice || batch.mrp * 0.7,
+          mrp:           batch.mrp,
+          qty:           batch.qty,
+          batchNo:       batch.batchNo,
+          expiryDate:    batch.expiryDate,
+          discount:      batch.discount || 0,
+          scheme:        batch.scheme   || '',
+        });
+      }
+    }
+
+    return {
+      _id:           med._id,
+      name:          med.name,
+      salt:          med.salt,
+      formulation:   med.formulation,
+      mrp:           med.mrp,
+      currentStock:  med.currentStock,
+      reorderLevel:  med.reorderLevel,
+      supplierRates: supplierRates.length > 0 ? supplierRates : [{
+        supplierName:  'No supplier data',
+        purchasePrice: med.mrp * 0.7,
+        mrp:           med.mrp,
+        qty:           0,
+      }],
+      bestPrice: supplierRates.reduce((best, s) =>
+        s.purchasePrice < (best?.purchasePrice ?? Infinity) ? s : best, null
+      ),
+    };
+  }));
+
+  return res.status(200).json(new apiResponse(200, { medicines: result, total: result.length }, 'Live rates fetched'));
+});

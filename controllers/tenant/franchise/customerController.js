@@ -208,3 +208,30 @@ export const getCareCoin = asyncHandler(async (req, res) => {
   ];
   return res.status(200).json(new apiResponse(200, { coins: cust?.careCoins || 0, transactions: MOCK_TX }, 'CareCoin data fetched'));
 });
+
+// ── POST /api/franchise/customers/:id/carecoin/redeem
+export const redeemCareCoin = asyncHandler(async (req, res) => {
+  const { coins, description = 'CareCoin redemption' } = req.body;
+  if (!coins || coins <= 0) return res.status(400).json(new apiResponse(400, null, 'Invalid coins amount'));
+  const Customer = getCustomerModel(req.db);
+  const customer = await Customer.findById(req.params.id);
+  if (!customer) return res.status(404).json(new apiResponse(404, null, 'Customer not found'));
+  const careCoins = customer.careCoins || customer.loyaltyPoints || 0;
+  if (careCoins < coins) {
+    return res.status(400).json(new apiResponse(400, null, `Insufficient CareCoin balance. Available: ${careCoins}`));
+  }
+  // Deduct coins
+  if (customer.careCoins !== undefined) customer.careCoins -= coins;
+  else customer.loyaltyPoints = (customer.loyaltyPoints || 0) - coins;
+  // Push to transaction history if array exists
+  if (Array.isArray(customer.careCoinTransactions)) {
+    customer.careCoinTransactions.push({
+      type: 'debit', coins, description, date: new Date(),
+    });
+  }
+  await customer.save();
+  return res.status(200).json(new apiResponse(200, {
+    coinsRedeemed: coins,
+    remaining: customer.careCoins ?? customer.loyaltyPoints,
+  }, `${coins} CareCoin redeemed successfully`));
+});

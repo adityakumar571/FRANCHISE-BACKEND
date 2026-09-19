@@ -140,3 +140,51 @@ export const recordPayment = asyncHandler(async (req, res) => {
   await Supplier.findByIdAndUpdate(req.params.id, { $inc: { outstandingBalance: -Number(amount) } });
   return res.status(201).json(new apiResponse(201, { amount, mode }, 'Payment recorded'));
 });
+
+// ── GET /api/franchise/suppliers/:id/payments   (path alias for /payment-history)
+// Frontend calls /payments — backend had /payment-history — this fixes the mismatch
+export const getSupplierPayments = asyncHandler(async (req, res) => {
+  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const { page = 1, limit = 20 } = req.query;
+  const paid = await PurchaseInvoice.find({ supplierId: req.params.id, paidAmt: { $gt: 0 } })
+    .sort({ billDate: -1 })
+    .skip((Number(page) - 1) * Number(limit))
+    .limit(Number(limit))
+    .lean();
+  const total = await PurchaseInvoice.countDocuments({ supplierId: req.params.id, paidAmt: { $gt: 0 } });
+  return res.status(200).json(new apiResponse(200, {
+    payments: paid.map(i => ({
+      _id:     i._id,
+      date:    new Date(i.billDate).toLocaleDateString('en-IN'),
+      voucher: i.billNo,
+      amount:  i.paidAmt,
+      mode:    i.paymentMode || 'Cash',
+      status:  i.status,
+      notes:   i.notes || '',
+    })),
+    total,
+    totalPages: Math.ceil(total / Number(limit)),
+  }, 'Payments fetched'));
+});
+
+// ── POST /api/franchise/suppliers/:id/payments   (path alias for /payment)
+export const recordSupplierPayment = asyncHandler(async (req, res) => {
+  const { amount, mode = 'Cash', notes = '', referenceNo = '' } = req.body;
+  if (!amount || Number(amount) <= 0) {
+    return res.status(400).json(new apiResponse(400, null, 'Valid amount required'));
+  }
+  const Supplier = getSupplierModel(req.db);
+  const supplier = await Supplier.findByIdAndUpdate(
+    req.params.id,
+    { $inc: { outstandingBalance: -Number(amount) } },
+    { new: true }
+  );
+  if (!supplier) return res.status(404).json(new apiResponse(404, null, 'Supplier not found'));
+  return res.status(200).json(new apiResponse(200, {
+    paid:        Number(amount),
+    mode,
+    notes,
+    referenceNo,
+    newOutstanding: supplier.outstandingBalance,
+  }, `Payment of ₹${amount} recorded`));
+});
