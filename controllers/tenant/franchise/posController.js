@@ -426,7 +426,7 @@ export const getHoldBills = asyncHandler(async (req, res) => {
   const bills = await HoldBill.find({ isActive: true }).sort({ createdAt: -1 }).lean();
 
   const result = bills.map(b => ({
-    id:           b._id,
+    id:           b._id.toString(),
     holdId:       b.holdId || b._id.toString().slice(-6).toUpperCase(),
     name:         b.customerName,
     items:        b.items?.length || 0,
@@ -458,6 +458,31 @@ export const createHoldBill = asyncHandler(async (req, res) => {
     id:     bill._id,
     holdId: bill.holdId,
   }, 'Bill held successfully'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/hold-bills/:id
+// Get a single hold bill by ID (full items array for resume)
+// ────────────────────────────────────────────────────────────────────────────
+export const getHoldBillById = asyncHandler(async (req, res) => {
+  const HoldBill = getHoldBillModel(req.db);
+  const bill = await HoldBill.findById(req.params.id).lean();
+  console.log('[getHoldBillById] id:', req.params.id, '| found:', !!bill, '| items count:', bill?.items?.length, '| items:', JSON.stringify(bill?.items?.slice(0,2)));
+  if (!bill || !bill.isActive) {
+    return res.status(404).json(new apiResponse(404, null, 'Hold bill not found'));
+  }
+  return res.status(200).json(new apiResponse(200, {
+    id:           bill._id,
+    _id:          bill._id,
+    holdId:       bill.holdId,
+    customerName: bill.customerName,
+    customerId:   bill.customerId || null,
+    items:        bill.items || [],
+    subtotal:     bill.subtotal,
+    totalAmt:     bill.totalAmt,
+    note:         bill.note,
+    createdAt:    bill.createdAt,
+  }, 'Hold bill fetched'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────

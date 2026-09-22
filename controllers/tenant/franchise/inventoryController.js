@@ -227,18 +227,22 @@ export const getNearExpiry = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/expired
 // ────────────────────────────────────────────────────────────────────────────
 export const getExpiredStock = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, search = '' } = req.query;
   const MedicineBatch = getMedicineBatchModel(req.db);
 
   const now  = new Date();
   const skip = (Number(page) - 1) * Number(limit);
+
+  // Build base filter; search is applied after populate via JS filter
+  const baseFilter = { expiryDate: { $lt: now }, qty: { $gt: 0 }, isActive: true };
+
   const [batches, total] = await Promise.all([
-    MedicineBatch.find({ expiryDate: { $lt: now }, qty: { $gt: 0 }, isActive: true })
+    MedicineBatch.find(baseFilter)
       .populate('medicineId', 'name mrp').sort({ expiryDate: 1 }).skip(skip).limit(Number(limit)).lean(),
-    MedicineBatch.countDocuments({ expiryDate: { $lt: now }, qty: { $gt: 0 }, isActive: true }),
+    MedicineBatch.countDocuments(baseFilter),
   ]);
 
-  const result = batches.map(b => ({
+  let result = batches.map(b => ({
     _id:       b._id,
     name:      b.medicineId?.name || 'Unknown',
     batch:     b.batchNo,
@@ -247,6 +251,13 @@ export const getExpiredStock = asyncHandler(async (req, res) => {
     qty:       b.qty,
     value:     b.qty * (b.mrp || 0),
   }));
+
+  if (search) {
+    result = result.filter(r =>
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.batch?.toLowerCase().includes(search.toLowerCase())
+    );
+  }
 
   return res.status(200).json(new apiResponse(200, {
     items: result, total, totalPages: Math.ceil(total / Number(limit)),
@@ -259,12 +270,19 @@ export const getExpiredStock = asyncHandler(async (req, res) => {
 export const getDamagedStock = asyncHandler(async (req, res) => {
   await seedAdjustments(req.db);
   const SA = getStockAdjustmentModel(req.db);
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, search = '' } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
+  const baseFilter = { type: { $in: ['damaged'] }, status: 'completed' };
+  if (search) baseFilter.$or = [
+    { medicine: new RegExp(search, 'i') },
+    { batch:    new RegExp(search, 'i') },
+    { adjNo:    new RegExp(search, 'i') },
+  ];
+
   const [items, total] = await Promise.all([
-    SA.find({ type: { $in: ['damaged'] }, status: 'completed' }).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-    SA.countDocuments({ type: { $in: ['damaged'] }, status: 'completed' }),
+    SA.find(baseFilter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+    SA.countDocuments(baseFilter),
   ]);
 
   const result = items.map(i => ({
@@ -286,13 +304,18 @@ export const getDamagedStock = asyncHandler(async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const getDeadStock = asyncHandler(async (req, res) => {
   const Medicine = getMedicineModel(req.db);
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, search = '' } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
-  // Dead stock = medicines with 0 stock or below reorder with no recent movement
+  const baseFilter = { currentStock: { $lte: 0 }, isActive: true };
+  if (search) baseFilter.$or = [
+    { name:     new RegExp(search, 'i') },
+    { category: new RegExp(search, 'i') },
+  ];
+
   const [items, total] = await Promise.all([
-    Medicine.find({ currentStock: { $lte: 0 }, isActive: true }).skip(skip).limit(Number(limit)).lean(),
-    Medicine.countDocuments({ currentStock: { $lte: 0 }, isActive: true }),
+    Medicine.find(baseFilter).skip(skip).limit(Number(limit)).lean(),
+    Medicine.countDocuments(baseFilter),
   ]);
 
   const result = items.map(m => ({
@@ -312,7 +335,7 @@ export const getDeadStock = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/fast-moving?period=month
 // ────────────────────────────────────────────────────────────────────────────
 export const getFastMoving = asyncHandler(async (req, res) => {
-  const { period = 'month', page = 1, limit = 20 } = req.query;
+  const { period = 'month', page = 1, limit = 20, search = '' } = req.query;
   const SaleInvoice = getSaleInvoiceModel(req.db);
 
   const now = new Date();
@@ -321,9 +344,13 @@ export const getFastMoving = asyncHandler(async (req, res) => {
   if (period === 'month') periodStart.setMonth(now.getMonth() - 1);
   if (period === 'year')  periodStart.setFullYear(now.getFullYear() - 1);
 
+  const matchStage = { $match: { invoiceDate: { $gte: periodStart }, status: { $ne: 'Cancelled' } } };
+  if (search) matchStage.$match['items.medicineName'] = new RegExp(search, 'i');
+
   const top = await SaleInvoice.aggregate([
     { $match: { invoiceDate: { $gte: periodStart }, status: { $ne: 'Cancelled' } } },
     { $unwind: '$items' },
+    ...(search ? [{ $match: { 'items.medicineName': new RegExp(search, 'i') } }] : []),
     { $group: { _id: '$items.medicineId', name: { $first: '$items.medicineName' }, totalQty: { $sum: '$items.qty' }, totalSales: { $sum: '$items.amount' } } },
     { $sort: { totalQty: -1 } },
     { $skip: (Number(page) - 1) * Number(limit) },
@@ -331,7 +358,8 @@ export const getFastMoving = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json(new apiResponse(200, {
-    items: top.map((t, i) => ({ rank: i + 1, medicineId: t._id, name: t.name, qty: t.totalQty, sales: `₹${t.totalSales.toLocaleString('en-IN')}`, status: 'Fast Moving' })),
+    items: top.map((t, i) => ({ rank: (Number(page) - 1) * Number(limit) + i + 1, medicineId: t._id, name: t.name, qty: t.totalQty, sales: `₹${t.totalSales.toLocaleString('en-IN')}`, status: 'Fast Moving' })),
+    total: top.length,
   }, 'Fast moving items fetched'));
 });
 
@@ -339,13 +367,15 @@ export const getFastMoving = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/slow-moving?period=month
 // ────────────────────────────────────────────────────────────────────────────
 export const getSlowMoving = asyncHandler(async (req, res) => {
-  const { period = 'month', page = 1, limit = 20 } = req.query;
+  const { period = 'month', page = 1, limit = 20, search = '' } = req.query;
   const Medicine    = getMedicineModel(req.db);
   const SaleInvoice = getSaleInvoiceModel(req.db);
 
   const now = new Date();
   const periodStart = new Date(now);
   if (period === 'month') periodStart.setMonth(now.getMonth() - 1);
+  if (period === 'week')  periodStart.setDate(now.getDate() - 7);
+  if (period === 'year')  periodStart.setFullYear(now.getFullYear() - 1);
 
   const soldIds = await SaleInvoice.aggregate([
     { $match: { invoiceDate: { $gte: periodStart } } },
@@ -354,21 +384,25 @@ export const getSlowMoving = asyncHandler(async (req, res) => {
   ]);
   const soldSet = new Set(soldIds.map(s => s._id?.toString()));
 
-  const allMeds = await Medicine.find({ isActive: true, currentStock: { $gt: 0 } }).lean();
+  const medFilter = { isActive: true, currentStock: { $gt: 0 } };
+  if (search) medFilter.$or = [{ name: new RegExp(search, 'i') }];
+
+  const allMeds  = await Medicine.find(medFilter).lean();
   const slowMeds = allMeds.filter(m => !soldSet.has(m._id.toString()));
 
-  const skip = (Number(page) - 1) * Number(limit);
+  const skip   = (Number(page) - 1) * Number(limit);
   const result = slowMeds.slice(skip, skip + Number(limit)).map((m, i) => ({
-    rank: skip + i + 1,
-    medicineId: m._id,
-    name: m.name,
+    rank:        skip + i + 1,
+    medicineId:  m._id,
+    name:        m.name,
     currentStock: m.currentStock,
-    stockValue: `₹${(m.currentStock * m.purchasePrice).toLocaleString('en-IN')}`,
-    status: 'Slow Moving',
+    stockValue:  `₹${(m.currentStock * m.purchasePrice).toLocaleString('en-IN')}`,
+    status:      'Slow Moving',
   }));
 
   return res.status(200).json(new apiResponse(200, {
     items: result, total: slowMeds.length,
+    totalPages: Math.ceil(slowMeds.length / Number(limit)),
   }, 'Slow moving items fetched'));
 });
 
@@ -436,7 +470,7 @@ export const getStockLedger = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/batch-expiry?page=
 // ────────────────────────────────────────────────────────────────────────────
 export const getBatchExpiry = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, search = '' } = req.query;
+  const { page = 1, limit = 20, search = '', status: statusFilter = '' } = req.query;
   const MedicineBatch = getMedicineBatchModel(req.db);
 
   const filter = { isActive: true };
@@ -448,21 +482,31 @@ export const getBatchExpiry = asyncHandler(async (req, res) => {
     MedicineBatch.countDocuments(filter),
   ]);
 
-  const result = batches.map(b => {
+  let result = batches.map(b => {
     const daysLeft = Math.ceil((new Date(b.expiryDate) - now) / 86400000);
     return {
-      _id:     b._id,
+      _id:      b._id,
       medicine: b.medicineId?.name || 'Unknown',
-      batch:   b.batchNo,
-      mfgDate: b.mfgDate ? new Date(b.mfgDate).toLocaleDateString('en-IN') : '—',
-      expiry:  new Date(b.expiryDate).toLocaleDateString('en-IN'),
+      batch:    b.batchNo,
+      mfgDate:  b.mfgDate ? new Date(b.mfgDate).toLocaleDateString('en-IN') : '—',
+      expiry:   new Date(b.expiryDate).toLocaleDateString('en-IN'),
       daysLeft,
-      qty:     b.qty,
-      mrp:     b.mrp,
+      qty:      b.qty,
+      mrp:      b.mrp,
       rackLabel: b.rackLabel || '—',
-      status:  daysLeft < 0 ? 'Expired' : daysLeft <= 30 ? 'Critical' : daysLeft <= 90 ? 'Warning' : 'Safe',
+      status:   daysLeft < 0 ? 'Expired' : daysLeft <= 30 ? 'Critical' : daysLeft <= 90 ? 'Warning' : 'Safe',
     };
   });
+
+  // Apply search filter on medicine name / batch after populate
+  if (search) {
+    result = result.filter(r =>
+      r.medicine.toLowerCase().includes(search.toLowerCase()) ||
+      r.batch?.toLowerCase().includes(search.toLowerCase())
+    );
+  }
+  // Apply status filter
+  if (statusFilter) result = result.filter(r => r.status === statusFilter);
 
   return res.status(200).json(new apiResponse(200, {
     batches: result, total,

@@ -306,32 +306,44 @@ export const updatePurchaseOrderStatus = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// GET /api/franchise/grn?page=
+// GET /api/franchise/grn?page=&limit=&search=&supplier=&status=&from=&to=
 // ────────────────────────────────────────────────────────────────────────────
 export const getGRNList = asyncHandler(async (req, res) => {
   await seedPurchaseData(req.db);
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, search = '', supplier = '', status = '', from = '', to = '' } = req.query;
   const GRN = getGRNModel(req.db);
+
+  const filter = {};
+  if (search)   filter.$or = [{ grnNo: new RegExp(search, 'i') }, { supplier: new RegExp(search, 'i') }, { invoiceNo: new RegExp(search, 'i') }];
+  if (supplier) filter.supplier = new RegExp(supplier, 'i');
+  if (status)   filter.status   = status;
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) { const d = new Date(from); d.setHours(0, 0, 0, 0);       filter.createdAt.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23, 59, 59, 999);  filter.createdAt.$lte = d; }
+  }
 
   const skip = (Number(page) - 1) * Number(limit);
   const [grns, total] = await Promise.all([
-    GRN.find().sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-    GRN.countDocuments(),
+    GRN.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+    GRN.countDocuments(filter),
   ]);
 
   const result = grns.map(g => ({
-    _id:     g._id,
-    grnNo:   g.grnNo,
-    poRef:   g.poRef,
+    _id:      g._id,
+    grnNo:    g.grnNo,
+    poRef:    g.poRef,
     supplier: g.supplier,
-    items:   g.items?.length || 0,
-    status:  g.status,
-    date:    new Date(g.createdAt).toISOString().split('T')[0],
+    invoiceNo: g.invoiceNo,
+    items:    g.items?.length || 0,
+    status:   g.status,
+    date:     new Date(g.createdAt).toISOString().split('T')[0],
   }));
 
   return res.status(200).json(new apiResponse(200, {
     grns: result, total,
-    totalPages: Math.ceil(total / Number(limit)),
+    totalPages:  Math.ceil(total / Number(limit)),
+    currentPage: Number(page),
   }, 'GRNs fetched'));
 });
 
@@ -395,17 +407,27 @@ export const getGRNById = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// GET /api/franchise/purchase-returns?page=
+// GET /api/franchise/purchase-returns?page=&limit=&search=&supplier=&status=&from=&to=
 // ────────────────────────────────────────────────────────────────────────────
 export const getPurchaseReturns = asyncHandler(async (req, res) => {
   await seedPurchaseData(req.db);
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, search = '', supplier = '', status = '', from = '', to = '' } = req.query;
   const PurchaseReturn = getPurchaseReturnModel(req.db);
+
+  const filter = {};
+  if (search)   filter.$or = [{ returnNo: new RegExp(search, 'i') }, { supplier: new RegExp(search, 'i') }, { grnRef: new RegExp(search, 'i') }];
+  if (supplier) filter.supplier = new RegExp(supplier, 'i');
+  if (status)   filter.status   = status;
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) { const d = new Date(from); d.setHours(0, 0, 0, 0);       filter.createdAt.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23, 59, 59, 999);  filter.createdAt.$lte = d; }
+  }
 
   const skip = (Number(page) - 1) * Number(limit);
   const [returns, total] = await Promise.all([
-    PurchaseReturn.find().sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-    PurchaseReturn.countDocuments(),
+    PurchaseReturn.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+    PurchaseReturn.countDocuments(filter),
   ]);
 
   const result = returns.map(r => ({
@@ -421,7 +443,8 @@ export const getPurchaseReturns = asyncHandler(async (req, res) => {
 
   return res.status(200).json(new apiResponse(200, {
     returns: result, total,
-    totalPages: Math.ceil(total / Number(limit)),
+    totalPages:  Math.ceil(total / Number(limit)),
+    currentPage: Number(page),
   }, 'Purchase returns fetched'));
 });
 
@@ -437,7 +460,7 @@ export const createPurchaseReturn = asyncHandler(async (req, res) => {
 
   const count    = await PurchaseReturn.countDocuments();
   const returnNo = `PR-${String(count + 102).padStart(3, '0')}`;
-  const totalAmt = items.reduce((s, i) => s + (Number(i.qty) * 0), 0);
+  const totalAmt = items.reduce((s, i) => s + (Number(i.qty) * Number(i.ptr || 0)), 0);
 
   const ret = await PurchaseReturn.create({
     returnNo, supplierId, supplier, grnRef, items,

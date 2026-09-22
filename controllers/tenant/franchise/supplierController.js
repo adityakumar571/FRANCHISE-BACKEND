@@ -93,10 +93,22 @@ export const getSupplierById = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/suppliers/:id/ledger
 export const getSupplierLedger = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, from = '', to = '' } = req.query;
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
-  const invoices = await PurchaseInvoice.find({ supplierId: req.params.id })
-    .sort({ billDate: -1 }).skip((Number(page)-1)*Number(limit)).limit(Number(limit)).lean();
+
+  const filter = { supplierId: req.params.id };
+  if (from || to) {
+    filter.billDate = {};
+    if (from) { const d = new Date(from); d.setHours(0, 0, 0, 0);       filter.billDate.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23, 59, 59, 999);  filter.billDate.$lte = d; }
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [invoices, total] = await Promise.all([
+    PurchaseInvoice.find(filter).sort({ billDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    PurchaseInvoice.countDocuments(filter),
+  ]);
+
   const result = invoices.map(inv => ({
     date:    new Date(inv.billDate).toLocaleDateString('en-IN'),
     voucher: inv.billNo,
@@ -105,7 +117,13 @@ export const getSupplierLedger = asyncHandler(async (req, res) => {
     balance: inv.dueAmt,
     status:  inv.status,
   }));
-  return res.status(200).json(new apiResponse(200, result, 'Ledger fetched'));
+
+  return res.status(200).json(new apiResponse(200, {
+    entries:    result,
+    total,
+    totalPages: Math.ceil(total / Number(limit)),
+    currentPage: Number(page),
+  }, 'Ledger fetched'));
 });
 
 // ── GET /api/franchise/suppliers/:id/outstanding

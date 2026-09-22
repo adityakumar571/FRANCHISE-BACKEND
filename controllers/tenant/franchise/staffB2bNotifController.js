@@ -503,3 +503,39 @@ export const updateLayoutRack = asyncHandler(async (req, res) => {
   const rack = await Rack.findByIdAndUpdate(req.params.id, req.body, { new: true });
   return res.status(200).json(new apiResponse(200, rack, 'Rack updated'));
 });
+
+// ── GET /api/franchise/staff/attendance?date=YYYY-MM-DD
+// List attendance records for a specific date (date-based lookup)
+export const getStaffAttendanceByDate = asyncHandler(async (req, res) => {
+  const Staff = getFranchiseStaffModel(req.db);
+  const { date, dept = '' } = req.query;
+
+  const filter = {};
+  if (dept) filter.department = new RegExp(dept, 'i');
+
+  // If no date param, return today's attendance summary
+  const staff = await Staff.find(filter).lean();
+
+  const summary = {
+    date:    date || new Date().toISOString().split('T')[0],
+    total:   staff.length,
+    present: staff.filter(s => s.attendance === 'Present').length,
+    absent:  staff.filter(s => s.attendance === 'Absent').length,
+    late:    staff.filter(s => s.attendance === 'Late').length,
+    onLeave: staff.filter(s => s.attendance === 'Leave').length,
+  };
+
+  return res.status(200).json(new apiResponse(200, {
+    ...summary,
+    records: staff.map(s => ({
+      _id:        s._id,
+      staffId:    s.staffId,
+      name:       s.name,
+      role:       s.role,
+      department: s.department,
+      shift:      s.shift,
+      attendance: s.attendance,
+      isActive:   s.isActive,
+    })),
+  }, 'Attendance fetched'));
+});

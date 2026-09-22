@@ -256,3 +256,40 @@ export const saveMenuAccess = asyncHandler(async (req, res) => {
   )
   return res.status(200).json(new apiResponse(200, { role: doc.role, items: Object.fromEntries(doc.items) }, 'Menu access saved ✅'))
 })
+
+/* ─────────────────────────────────────────────
+   PUT /api/users/:id/menu-access — save per-user individual menu access
+   (distinct from role-based /menu-access/:role)
+───────────────────────────────────────────── */
+export const saveUserMenuAccess = asyncHandler(async (req, res) => {
+  const { items } = req.body
+  if (!items || typeof items !== 'object') {
+    return res.status(400).json(new apiResponse(400, null, 'items must be an object'))
+  }
+
+  // Reuse MenuAccess model — store by userId (not role)
+  const MenuAccess = getMenuAccessModel(req.db)
+  const doc = await MenuAccess.findOneAndUpdate(
+    { userId: req.params.id },
+    { $set: { items: new Map(Object.entries(items)), userId: req.params.id } },
+    { upsert: true, new: true }
+  )
+
+  // Also update UserAccess (module-level) based on enabled menu items
+  const enabledModules = Object.entries(items)
+    .filter(([key, val]) => val && !key.includes('_'))  // top-level module keys
+    .map(([key]) => key)
+
+  if (enabledModules.length > 0) {
+    const UserAccess = getUserAccessModel(req.db)
+    await UserAccess.findOneAndUpdate(
+      { userId: req.params.id },
+      { $set: { modules: enabledModules } },
+      { upsert: true, new: true }
+    )
+  }
+
+  return res.status(200).json(
+    new apiResponse(200, { items: Object.fromEntries(doc.items || new Map()) }, 'Menu access saved ✅')
+  )
+})

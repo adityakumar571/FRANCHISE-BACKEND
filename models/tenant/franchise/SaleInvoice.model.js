@@ -1,12 +1,14 @@
 import mongoose from 'mongoose';
 
 const SaleItemSchema = new mongoose.Schema({
-  medicineId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true },
+  medicineId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine' },  // optional — not available for manual entries
   medicineName: { type: String },
+  batchId:      { type: mongoose.Schema.Types.ObjectId, ref: 'MedicineBatch' },
   batchNo:      { type: String },
   expiryDate:   { type: Date },
   qty:          { type: Number, required: true },
   mrp:          { type: Number, required: true },
+  ptr:          { type: Number },
   discountPct:  { type: Number, default: 0 },
   gstPct:       { type: Number, default: 0 },
   amount:       { type: Number, required: true },
