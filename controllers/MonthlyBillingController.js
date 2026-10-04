@@ -1,7 +1,7 @@
-import asyncHandler from "../utils/asyncHandler.js";
-import apiResponse from "../utils/apiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { apiResponse } from "../utils/apiResponse.js";
 import MonthlyBill from "../models/MonthlyBill.model.js";
-import TenantSubscription from "../models/tenantSubscription.model.js";
+import TenantSubscription from "../models/TenantSubscription.modal.js";
 import Tenant from "../models/tenant.model.js";
 
 /* ═══════════════════════════════════════════════════════════════════

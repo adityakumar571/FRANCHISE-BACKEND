@@ -1,32 +1,35 @@
 import { Router } from "express";
 import { verifyMainJWT } from "../middleware/authTypeMiddlewareMain.js";
 import {
-    getBillingConfig,
-    updateBillingConfig,
     generateMonthlyBill,
-    generateBulkBills,
+    getMonthlyBills,
+    getBillDetail,
     markBillPaid,
     markOverdueBills,
-    getBills,
-    getBillById,
-    previewBill,
-    getInvoice,
+    deleteBill,
 } from "../controllers/MonthlyBillingController.js";
 
 const router = Router();
 
-// ── Public ────────────────────────────────────────────────────────
-router.get("/config",   getBillingConfig);
-router.post("/preview", previewBill);
+// Apply authentication middleware
+router.use(verifyMainJWT);
 
-// ── Admin ─────────────────────────────────────────────────────────
-router.put("/config",          verifyMainJWT, updateBillingConfig);
-router.post("/generate",       verifyMainJWT, generateMonthlyBill);
-router.post("/generate-bulk",  verifyMainJWT, generateBulkBills);
-router.patch("/mark-overdue",  verifyMainJWT, markOverdueBills);
-router.patch("/:id/mark-paid", verifyMainJWT, markBillPaid);
-router.get("/:id/invoice",     verifyMainJWT, getInvoice);        // ← NEW
-router.get("/:id",             verifyMainJWT, getBillById);
-router.get("/",                verifyMainJWT, getBills);
+// Generate monthly bill
+router.post("/generate", generateMonthlyBill);
+
+// Get all monthly bills
+router.get("/", getMonthlyBills);
+
+// Get single bill detail
+router.get("/:billId", getBillDetail);
+
+// Mark bill as paid
+router.patch("/:billId/mark-paid", markBillPaid);
+
+// Mark overdue bills
+router.patch("/mark-overdue", markOverdueBills);
+
+// Delete bill
+router.delete("/:billId", deleteBill);
 
 export default router;

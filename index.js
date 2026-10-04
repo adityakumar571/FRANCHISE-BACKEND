@@ -178,6 +178,7 @@ import franchiseFullPurchaseRoutes  from "./routes/tenant/franchise/fullPurchase
 import franchiseFullInventoryRoutes from "./routes/tenant/franchise/fullInventoryRoutes.js";
 import franchiseLiveRatesRoutes     from "./routes/tenant/franchise/liveRatesRoutes.js";
 import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRoutes.js";
+import franchiseSupplierRoutesNew   from "./routes/tenant/franchise/supplierRoutes.js";
 
 app.use("/api/franchise/dashboard",   franchiseDashboardRoutes);
 app.use("/api/franchise/sales",       franchiseSalesRoutes);
@@ -187,11 +188,16 @@ app.use("/api/franchise/inventory",   franchiseInventoryRoutes);
 app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);
 app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
+app.use("/api/franchise/suppliers",   franchiseSupplierRoutesNew);
 app.use("/api/franchise",             franchiseRemainingRoutes);
 
 /* Tenant's own subscription info */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
 app.use("/api/admins",          createAdminRoutes);
+
+/* Supplier routes for franchise admins */
+import franchiseSupplierRoutes from "./routes/FranchiseSupplierRoutes.js";
+app.use("/api/franchise-suppliers", franchiseSupplierRoutes);
 
 /* HR Module */
 app.use("/api/hr", hrRoutes);

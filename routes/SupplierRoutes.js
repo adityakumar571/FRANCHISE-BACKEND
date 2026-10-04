@@ -1,11 +1,14 @@
 import express from 'express'
 import { body } from 'express-validator'
+import SupplierAuthController from '../controllers/SupplierAuthController.js'
+import SupplierMedicineController from '../controllers/SupplierMedicineController.js'
 import SupplierController from '../controllers/SupplierController.js'
+import { verifySupplierJWT, checkSupplierStatus } from '../middleware/supplierAuth.middleware.js'
 import { verifyMainJWT, authorizeMainUserType } from '../middleware/authTypeMiddlewareMain.js'
 
 const router = express.Router()
 
-// Validation rules
+// Validation rules for supplier creation (Super Admin)
 const supplierValidationRules = [
   body('companyName')
     .trim()
@@ -22,14 +25,13 @@ const supplierValidationRules = [
     .normalizeEmail()
     .withMessage('Please provide a valid email address'),
   
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  
   body('phone')
     .isMobilePhone('en-IN')
     .withMessage('Please provide a valid Indian phone number'),
-  
-  body('alternatePhone')
-    .optional()
-    .isMobilePhone('en-IN')
-    .withMessage('Please provide a valid alternate phone number'),
   
   body('address.street')
     .trim()
@@ -52,90 +54,161 @@ const supplierValidationRules = [
   
   body('businessType')
     .isIn(['Manufacturer', 'Distributor', 'Retailer', 'Wholesaler', 'Service Provider'])
-    .withMessage('Please select a valid business type'),
-  
-  body('gstNumber')
-    .optional()
-    .matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
-    .withMessage('Please provide a valid GST number'),
-  
-  body('panNumber')
-    .optional()
-    .matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
-    .withMessage('Please provide a valid PAN number'),
-  
-  body('creditLimit')
-    .optional()
-    .isNumeric()
-    .withMessage('Credit limit must be a number'),
-  
-  body('paymentTerms')
-    .optional()
-    .isIn(['Cash', 'Net 30', 'Net 60', 'Net 90', 'Custom'])
-    .withMessage('Please select a valid payment term'),
-  
-  body('rating')
-    .optional()
-    .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5')
+    .withMessage('Please select a valid business type')
 ]
 
-const productValidationRules = [
+// Validation rules for registration
+const registrationValidationRules = [
+  body('companyName')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Company name must be between 2 and 100 characters'),
+  
+  body('contactPerson')
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Contact person name must be between 2 and 50 characters'),
+  
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address'),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  
+  body('phone')
+    .isMobilePhone('en-IN')
+    .withMessage('Please provide a valid Indian phone number'),
+  
+  body('address.street')
+    .trim()
+    .isLength({ min: 5, max: 200 })
+    .withMessage('Street address must be between 5 and 200 characters'),
+  
+  body('address.city')
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('City must be between 2 and 50 characters'),
+  
+  body('address.state')
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('State must be between 2 and 50 characters'),
+  
+  body('address.pincode')
+    .isPostalCode('IN')
+    .withMessage('Please provide a valid Indian pincode'),
+  
+  body('businessType')
+    .isIn(['Manufacturer', 'Distributor', 'Retailer', 'Wholesaler', 'Service Provider'])
+    .withMessage('Please select a valid business type')
+]
+
+// Login validation
+const loginValidationRules = [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address'),
+  
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required')
+]
+
+// Medicine validation
+const medicineValidationRules = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('Product name must be between 2 and 100 characters'),
+    .withMessage('Medicine name must be between 2 and 100 characters'),
   
   body('category')
-    .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Category must be between 2 and 50 characters'),
+    .isIn(['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Other'])
+    .withMessage('Please select a valid category'),
   
-  body('price')
+  body('mrp')
     .isNumeric()
-    .withMessage('Price must be a number'),
+    .withMessage('MRP must be a number')
+    .isFloat({ min: 0 })
+    .withMessage('MRP must be positive'),
   
-  body('unit')
-    .trim()
-    .isLength({ min: 1, max: 20 })
-    .withMessage('Unit must be between 1 and 20 characters')
+  body('supplierPrice')
+    .isNumeric()
+    .withMessage('Supplier price must be a number')
+    .isFloat({ min: 0 })
+    .withMessage('Supplier price must be positive'),
+  
+  body('stock')
+    .isInt({ min: 0 })
+    .withMessage('Stock must be a positive integer')
 ]
 
-// Apply auth middleware to all routes
-router.use(verifyMainJWT)
+// ===== PUBLIC ROUTES (No Authentication) =====
+// Supplier self-registration and login
 
-// Routes accessible by Super Admin and Admin
-// Get all suppliers with pagination and filters
-router.get('/', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.getAllSuppliers)
+// Supplier Registration (Public)
+router.post('/auth/register', registrationValidationRules, SupplierAuthController.register)
 
-// Get supplier statistics
-router.get('/stats', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.getSupplierStats)
+// Supplier Login (Public)
+router.post('/auth/login', loginValidationRules, SupplierAuthController.login)
 
-// Get suppliers for dropdown
-router.get('/dropdown', authorizeMainUserType('Super Admin', 'Admin', 'Manager'), SupplierController.getSuppliersDropdown)
+// Forgot Password (Public)
+router.post('/auth/forgot-password', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required')
+], SupplierAuthController.forgotPassword)
 
-// Get supplier by ID
-router.get('/:id', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.getSupplierById)
+// Reset Password (Public)
+router.post('/auth/reset-password/:token', [
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+], SupplierAuthController.resetPassword)
 
-// Create new supplier
-router.post('/', authorizeMainUserType('Super Admin', 'Admin'), supplierValidationRules, SupplierController.createSupplier)
+// ===== PROTECTED ROUTES (Supplier Authentication Required) =====
+router.use('/auth', verifySupplierJWT)
+router.use('/medicines', verifySupplierJWT, checkSupplierStatus('Active'))
+router.use('/dashboard', verifySupplierJWT, checkSupplierStatus('Active'))
 
-// Update supplier
-router.put('/:id', authorizeMainUserType('Super Admin', 'Admin'), supplierValidationRules, SupplierController.updateSupplier)
+// Auth routes (protected)
+router.get('/auth/profile', SupplierAuthController.getProfile)
+router.put('/auth/profile', SupplierAuthController.updateProfile)
+router.post('/auth/change-password', [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], SupplierAuthController.changePassword)
+router.post('/auth/logout', SupplierAuthController.logout)
+
+// Dashboard routes
+router.get('/dashboard/stats', SupplierAuthController.getDashboardStats)
+
+// Medicine management routes
+router.get('/medicines', SupplierMedicineController.getMedicines)
+router.get('/medicines/categories', SupplierMedicineController.getCategories)
+router.get('/medicines/export', SupplierMedicineController.exportMedicines)
+router.get('/medicines/:medicineId', SupplierMedicineController.getMedicineById)
+router.post('/medicines', medicineValidationRules, SupplierMedicineController.addMedicine)
+router.put('/medicines/:medicineId', medicineValidationRules, SupplierMedicineController.updateMedicine)
+router.patch('/medicines/:medicineId/stock', [
+  body('stock').isInt({ min: 0 }).withMessage('Stock must be a positive integer')
+], SupplierMedicineController.updateStock)
+router.patch('/medicines/:medicineId/toggle', SupplierMedicineController.toggleAvailability)
+router.delete('/medicines/:medicineId', SupplierMedicineController.deleteMedicine)
+router.put('/medicines/bulk-update', SupplierMedicineController.bulkUpdate)
+
+// ===== SUPER ADMIN ROUTES ONLY (Supplier Management) =====
+router.use('/admin', verifyMainJWT, authorizeMainUserType('Super Admin'))
+
+// Get all suppliers for super admin ONLY
+router.get('/admin/list', SupplierController.getAllSuppliers)
+router.get('/admin/stats', SupplierController.getSupplierStats)
+router.get('/admin/:id', SupplierController.getSupplierById)
+
+// Create new supplier (Super Admin only)
+router.post('/admin/create', supplierValidationRules, SupplierController.createSupplier)
 
 // Update supplier status
-router.patch('/:id/status', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.updateSupplierStatus)
-
-// Delete supplier (soft delete)
-router.delete('/:id', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.deleteSupplier)
-
-// Permanently delete supplier (Super Admin only)
-router.delete('/:id/permanent', authorizeMainUserType('Super Admin'), SupplierController.permanentDeleteSupplier)
-
-// Add product to supplier
-router.post('/:id/products', authorizeMainUserType('Super Admin', 'Admin'), productValidationRules, SupplierController.addProduct)
-
-// Remove product from supplier
-router.delete('/:id/products/:productId', authorizeMainUserType('Super Admin', 'Admin'), SupplierController.removeProduct)
+router.patch('/admin/:id/status', SupplierController.updateSupplierStatus)
+router.delete('/admin/:id', SupplierController.deleteSupplier)
 
 export default router

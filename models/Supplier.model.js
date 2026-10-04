@@ -1,6 +1,9 @@
 import mongoose from 'mongoose'
+import bcrypt from 'bcrypt'
+import crypto from 'crypto'
 
 const supplierSchema = new mongoose.Schema({
+  // Basic Info
   companyName: {
     type: String,
     required: true,
@@ -17,6 +20,28 @@ const supplierSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
+  },
+  // Authentication
+  password: {
+    type: String,
+    required: true,
+    minlength: 6,
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  emailVerificationToken: {
+    type: String,
+  },
+  resetPasswordToken: {
+    type: String,
+  },
+  resetPasswordExpiry: {
+    type: Date,
+  },
+  lastLogin: {
+    type: Date,
   },
   phone: {
     type: String,
@@ -85,21 +110,85 @@ const supplierSchema = new mongoose.Schema({
       trim: true,
     },
   },
-  products: [{
+  // Medicine Inventory
+  medicines: [{
     name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    genericName: {
+      type: String,
+      trim: true,
+    },
+    manufacturer: {
       type: String,
       trim: true,
     },
     category: {
       type: String,
-      trim: true,
+      required: true,
+      enum: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Other'],
     },
-    price: {
-      type: Number,
-    },
-    unit: {
+    strength: {
       type: String,
       trim: true,
+    },
+    packSize: {
+      type: String,
+      trim: true,
+    },
+    batchNumber: {
+      type: String,
+      trim: true,
+    },
+    expiryDate: {
+      type: Date,
+    },
+    mrp: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    supplierPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    stock: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    minStock: {
+      type: Number,
+      default: 10,
+    },
+    isAvailable: {
+      type: Boolean,
+      default: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    images: [{
+      type: String,
+    }],
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
     },
   }],
   creditLimit: {
@@ -117,8 +206,15 @@ const supplierSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Active', 'Inactive', 'Blacklisted'],
-    default: 'Active',
+    enum: ['Active', 'Inactive', 'Suspended', 'Pending'],
+    default: 'Pending',
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: {
+    type: Date,
   },
   rating: {
     type: Number,
@@ -152,7 +248,6 @@ const supplierSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
   },
   lastModifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -168,6 +263,20 @@ supplierSchema.index({ companyName: 1 })
 supplierSchema.index({ status: 1 })
 supplierSchema.index({ businessType: 1 })
 supplierSchema.index({ createdAt: -1 })
+supplierSchema.index({ 'medicines.name': 'text', 'medicines.genericName': 'text' })
+
+// Pre-save middleware to hash password
+supplierSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next()
+  
+  try {
+    const salt = await bcrypt.genSalt(10)
+    this.password = await bcrypt.hash(this.password, salt)
+    next()
+  } catch (error) {
+    next(error)
+  }
+})
 
 // Pre-save middleware to update lastModifiedBy
 supplierSchema.pre('save', function(next) {
@@ -183,27 +292,51 @@ supplierSchema.virtual('fullAddress').get(function() {
   return `${addr.street}, ${addr.city}, ${addr.state} - ${addr.pincode}, ${addr.country}`
 })
 
-// Static method to get suppliers by business type
-supplierSchema.statics.getByBusinessType = function(businessType) {
-  return this.find({ businessType, status: 'Active' })
+// Authentication methods
+supplierSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password)
 }
 
-// Instance method to update rating
-supplierSchema.methods.updateRating = function(newRating) {
-  this.rating = newRating
+supplierSchema.methods.generatePasswordResetToken = function() {
+  const resetToken = crypto.randomBytes(32).toString('hex')
+  this.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex')
+  this.resetPasswordExpiry = Date.now() + 10 * 60 * 1000 // 10 minutes
+  return resetToken
+}
+
+// Medicine management methods
+supplierSchema.methods.addMedicine = function(medicineData) {
+  this.medicines.push({
+    ...medicineData,
+    addedAt: new Date(),
+    updatedAt: new Date()
+  })
   return this.save()
 }
 
-// Instance method to add product
-supplierSchema.methods.addProduct = function(productData) {
-  this.products.push(productData)
+supplierSchema.methods.updateMedicine = function(medicineId, updateData) {
+  const medicine = this.medicines.id(medicineId)
+  if (medicine) {
+    Object.assign(medicine, updateData)
+    medicine.updatedAt = new Date()
+    return this.save()
+  }
+  throw new Error('Medicine not found')
+}
+
+supplierSchema.methods.removeMedicine = function(medicineId) {
+  this.medicines.id(medicineId).remove()
   return this.save()
 }
 
-// Instance method to remove product
-supplierSchema.methods.removeProduct = function(productId) {
-  this.products.id(productId).remove()
-  return this.save()
+supplierSchema.methods.updateStock = function(medicineId, newStock) {
+  const medicine = this.medicines.id(medicineId)
+  if (medicine) {
+    medicine.stock = newStock
+    medicine.updatedAt = new Date()
+    return this.save()
+  }
+  throw new Error('Medicine not found')
 }
 
 export default mongoose.model('Supplier', supplierSchema)
