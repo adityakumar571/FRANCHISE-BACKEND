@@ -103,24 +103,9 @@ export const subscriptionGuard = asyncHandler(async (req, res, next) => {
   // Attach to request
   req.subscription = subscription;
 
-  // No session restrictions — admissions/registration always open unless plan expired
-  req.sessionRestrictions = {
-    newAdmissionsBlocked:       false,
-    studentRegistrationBlocked: false,
-    overdueMonthCount:          0,
-    hasSessionBill:             false,
-  };
-
   // Response headers
-  const usagePct = subscription.totalStudentLimit > 0
-    ? Math.round(((subscription.usedStudents || 0) / subscription.totalStudentLimit) * 100)
-    : 0;
-
   res.set("X-Subscription-Status",    subscription.status);
   res.set("X-Subscription-Days-Left", daysLeft !== null ? String(Math.max(0, daysLeft)) : "unlimited");
-  res.set("X-Subscription-Used",      String(subscription.usedStudents || 0));
-  res.set("X-Subscription-Limit",     String(subscription.totalStudentLimit || 0));
-  res.set("X-Subscription-Usage-Pct", String(usagePct));
   res.set("X-Subscription-Paid",      subscription.paidStatus || "UNKNOWN");
   if (subscription.isTrial) {
     res.set("X-Subscription-Trial",      "true");
@@ -132,8 +117,6 @@ export const subscriptionGuard = asyncHandler(async (req, res, next) => {
   if (daysLeft !== null && daysLeft <= 30 && daysLeft > 0 && !subscription.isTrial) warnings.push("EXPIRING_SOON");
   if (daysLeft !== null && daysLeft <= 7  && daysLeft > 0 && subscription.isTrial)  warnings.push("TRIAL_EXPIRING_SOON");
   if (daysLeft !== null && daysLeft <= 0)   warnings.push("EXPIRED");
-  if (usagePct >= 90)                        warnings.push("LIMIT_CRITICAL");
-  else if (usagePct >= 70)                   warnings.push("LIMIT_WARNING");
   if (subscription.paidStatus === "OVERDUE") warnings.push("PAYMENT_OVERDUE");
   if (subscription.paidStatus === "UNPAID")  warnings.push("PAYMENT_UNPAID");
   if (warnings.length) res.set("X-Subscription-Warnings", warnings.join(","));

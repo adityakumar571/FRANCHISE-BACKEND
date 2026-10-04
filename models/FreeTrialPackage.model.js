@@ -33,13 +33,6 @@ const FreeTrialPackageSchema = new mongoose.Schema(
             min:      1,
         },
 
-        // Student enrollment cap during trial
-        studentLimit: {
-            type:    Number,
-            default: 350,
-            min:     1,
-        },
-
         // Feature list (display only)
         features: [String],
 

@@ -136,41 +136,35 @@ export const registerTenant = asyncHandler(async (req, res) => {
         trialEnd.setDate(trialEnd.getDate() + (trialPkg.durationDays || 0));
 
         await TenantSubscription.create({
-            tenantId:          tenant._id,
-            isTrial:           true,
-            trialEndDate:      trialEnd,
-            status:            "TRIAL",
-            paidStatus:        "PAID",
-            totalStudentLimit: trialPkg.studentLimit || 0,
-            usedStudents:      0,
-            totalAmount:       0,
+            tenantId:       tenant._id,
+            isTrial:        true,
+            trialEndDate:   trialEnd,
+            status:         "TRIAL",
+            paidStatus:     "PAID",
+            totalAmount:    0,
             usedTrialPackageIds: [trialPkg._id],
             currentPlan: {
                 name:         trialPkg.name,
                 price:        0,
-                pricingModel: "FIXED",
-                studentLimit: trialPkg.studentLimit || 0,
                 billingCycle: "Monthly",
                 startDate:    trialStart,
                 endDate:      trialEnd,
             },
             history: [{
-                type:         "TRIAL_START",
-                name:         trialPkg.name,
-                price:        0,
-                studentLimit: trialPkg.studentLimit || 0,
-                startDate:    trialStart,
-                endDate:      trialEnd,
+                type:      "TRIAL_START",
+                name:      trialPkg.name,
+                price:     0,
+                startDate: trialStart,
+                endDate:   trialEnd,
             }],
         });
     } else {
         await TenantSubscription.create({
-            tenantId:          tenant._id,
-            isTrial:           false,
-            totalStudentLimit: 0,
-            totalAmount:       0,
-            status:            "PENDING",
-            history:           [],
+            tenantId:    tenant._id,
+            isTrial:     false,
+            totalAmount: 0,
+            status:      "PENDING",
+            history:     [],
         });
     }
 
@@ -289,10 +283,8 @@ export const getTenantById = asyncHandler(async (req, res) => {
             subscription: {
                 status:            subscription?.status || null,
                 isTrial:           subscription?.isTrial || false,
-                trialEndDate:      subscription?.trialEndDate || null,
-                totalStudentLimit: subscription?.totalStudentLimit || 0,
-                usedStudents:      subscription?.usedStudents || 0,
-                currentPlan:       subscription?.currentPlan || null,
+                trialEndDate: subscription?.trialEndDate || null,
+                currentPlan:  subscription?.currentPlan || null,
             },
         }, "Tenant fetched successfully 🚀")
     );

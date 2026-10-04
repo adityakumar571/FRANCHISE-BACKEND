@@ -59,10 +59,6 @@ router.get(
             ? Math.max(0, Math.ceil((new Date(endDate) - now) / (1000 * 60 * 60 * 24)))
             : null;
 
-        const totalLimit = subscription.totalStudentLimit || 0;
-        const usedCount  = subscription.usedStudents || 0;
-        const usagePct   = totalLimit > 0 ? Math.round((usedCount / totalLimit) * 100) : 0;
-
         const effectiveStatus = isExpired ? "EXPIRED" : subscription.status;
 
         // ── Auto-mark overdue installments (yearly plans only) ───────────────
@@ -99,21 +95,10 @@ router.get(
                     name:         subscription.currentPlan?.name         || "—",
                     billingCycle: subscription.currentPlan?.billingCycle || "—",
                     price:        subscription.currentPlan?.price        || 0,
-                    pricingModel: subscription.currentPlan?.pricingModel || "FIXED",
-                    studentLimit: subscription.currentPlan?.studentLimit || 0,
                     startDate:    subscription.currentPlan?.startDate    || null,
                     endDate,
                     daysLeft,
                     isExpired,
-                },
-
-                usage: {
-                    totalStudentLimit: totalLimit,
-                    usedStudents:      usedCount,
-                    remaining:         totalLimit > 0
-                        ? Math.max(0, totalLimit - usedCount)
-                        : "unlimited",
-                    percentUsed: usagePct,
                 },
 
                 billing: {
@@ -126,11 +111,10 @@ router.get(
                 },
 
                 addons: (subscription.currentAddons || []).map((a) => ({
-                    addonId:      a.addonId,
-                    name:         a.name,
-                    price:        a.price,
-                    studentLimit: a.studentLimit,
-                    quantity:     a.quantity || 1,
+                    addonId:  a.addonId,
+                    name:     a.name,
+                    price:    a.price,
+                    quantity: a.quantity || 1,
                 })),
 
                 installments: (() => {
@@ -161,7 +145,6 @@ router.get(
                         type:              h.type,
                         name:              h.name,
                         price:             h.price,
-                        studentLimit:      h.studentLimit,
                         startDate:         h.startDate,
                         endDate:           h.endDate,
                         createdAt:         h.createdAt,

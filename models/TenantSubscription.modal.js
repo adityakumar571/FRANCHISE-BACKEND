@@ -36,10 +36,6 @@ const TenantSubscriptionSchema = new mongoose.Schema(
             name: String,
             price: Number,                  // Final calculated price (after discounts)
             originalPrice: Number,          // Price before discount
-            pricingModel: String,           // "FIXED" | "PER_STUDENT"
-            pricePerStudent: Number,        // Used when pricingModel = PER_STUDENT
-            committedStudents: Number,      // Students committed at purchase time
-            studentLimit: Number,
             billingCycle: String,
             startDate: Date,
             endDate: Date,
@@ -74,7 +70,6 @@ const TenantSubscriptionSchema = new mongoose.Schema(
                 type: mongoose.Schema.Types.ObjectId,
                 ref: "SubscriptionPlan",
             },
-            committedStudents: Number,
             amountBreakdown: {
                 baseAmount: Number,
                 setupFee: Number,
@@ -92,8 +87,7 @@ const TenantSubscriptionSchema = new mongoose.Schema(
                 },
                 name: String,
                 price: Number,
-                studentLimit: Number,
-                billingCycle: { type: String, default: "Monthly" },  // addon ki billing cycle
+                billingCycle: { type: String, default: "Monthly" },
                 quantity: {
                     type: Number,
                     default: 1,
@@ -106,16 +100,6 @@ const TenantSubscriptionSchema = new mongoose.Schema(
         ],
 
         // ── Aggregates ──────────────────────────────────────────
-        totalStudentLimit: {
-            type: Number,
-            default: 0,
-        },
-
-        usedStudents: {
-            type: Number,
-            default: 0,
-        },
-
         totalAmount: {
             type: Number,
             default: 0,
@@ -168,9 +152,6 @@ const TenantSubscriptionSchema = new mongoose.Schema(
                 },
                 name: String,
                 price: Number,
-                pricingModel: String,
-                committedStudents: Number,
-                studentLimit: Number,
                 quantity: Number,
                 razorpayPaymentId: String,
                 startDate: Date,

@@ -11,7 +11,6 @@ export const createPlan = asyncHandler(async (req, res) => {
         description,
         price,
         billingCycle,
-        studentLimit,
         features,
         trialDays,
     } = req.body;
@@ -25,9 +24,6 @@ export const createPlan = asyncHandler(async (req, res) => {
 
     if (price === undefined || price === null || price === "") {
         return res.status(400).json(new apiResponse(400, null, "Price required"));
-    }
-    if (!studentLimit || Number(studentLimit) < 1) {
-        return res.status(400).json(new apiResponse(400, null, "Student limit required (minimum 1)"));
     }
 
     const existing = await SubscriptionPlan.findOne({
@@ -45,7 +41,6 @@ export const createPlan = asyncHandler(async (req, res) => {
         description,
         price:        Number(price)        || 0,
         billingCycle: billingCycle || "Monthly",
-        studentLimit: Number(studentLimit) || 0,
         trialDays:    Number(trialDays)    || 0,
         features,
     });

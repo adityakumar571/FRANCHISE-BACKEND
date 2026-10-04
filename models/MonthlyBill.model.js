@@ -24,30 +24,24 @@ const LineItemSchema = new mongoose.Schema(
         type: {
             type: String,
             enum: [
-                "BASE_PLAN",        // Flat base subscription charge
-                "EXTRA_STUDENTS",   // BillingConfig slot charge (extra beyond base)
-                "SUBSCRIPTION_ADDON", // Tenant purchased addon (e.g. "50 Student Pack")
+                "BASE_PLAN",          // Flat base subscription charge
+                "SUBSCRIPTION_ADDON", // Tenant purchased addon
             ],
             required: true,
         },
-        description: { type: String, required: true }, // e.g. "Pro Plan — up to 350 students"
+        description: { type: String, required: true }, // e.g. "Pro Plan"
         unitPrice:   { type: Number, default: 0 },     // price per unit
-        quantity:    { type: Number, default: 1 },     // e.g. number of slots
+        quantity:    { type: Number, default: 1 },     // e.g. number of addons
         amount:      { type: Number, default: 0 },     // unitPrice × quantity
 
         // Extra metadata per type
         meta: {
             // BASE_PLAN
-            planName:         { type: String },
-            studentLimit:     { type: Number },
-            // EXTRA_STUDENTS
-            extraStudents:    { type: Number },
-            slotSize:         { type: Number },
+            planName:      { type: String },
             // SUBSCRIPTION_ADDON
-            addonId:          { type: mongoose.Schema.Types.ObjectId },
-            addonName:        { type: String },
-            addonStudents:    { type: Number },
-            billingCycle:     { type: String },  // original cycle before conversion
+            addonId:       { type: mongoose.Schema.Types.ObjectId },
+            addonName:     { type: String },
+            billingCycle:  { type: String },  // original cycle before conversion
         },
     },
     { _id: false }
@@ -76,17 +70,6 @@ const MonthlyBillSchema = new mongoose.Schema(
         generatedAt:  { type: Date,   default: Date.now },
         dueDate:      { type: Date },
 
-        // ── Student Count Snapshot ───────────────────────────────
-        studentCount: { type: Number, required: true, default: 0 },
-
-        // ── Pricing Config Snapshot ──────────────────────────────
-        configSnapshot: {
-            baseStudentLimit: { type: Number },
-            basePrice:        { type: Number },
-            addonSlotSize:    { type: Number },
-            addonSlotPrice:   { type: Number },
-        },
-
         // ── Addons Snapshot ──────────────────────────────────────
         subscriptionAddonsSnapshot: [
             {
@@ -94,7 +77,6 @@ const MonthlyBillSchema = new mongoose.Schema(
                 name:         { type: String },
                 price:        { type: Number },
                 monthlyPrice: { type: Number },
-                studentLimit: { type: Number },
                 billingCycle: { type: String },
                 quantity:     { type: Number, default: 1 },
             },
@@ -106,10 +88,8 @@ const MonthlyBillSchema = new mongoose.Schema(
 
         // ── Amount Summary ───────────────────────────────────────
         baseAmount:              { type: Number, default: 0 },
-        slotAddonAmount:         { type: Number, default: 0 },
-        addonSlots:              { type: Number, default: 0 },
         subscriptionAddonAmount: { type: Number, default: 0 },
-        addonAmount:             { type: Number, default: 0 }, // slotAddon + subscriptionAddon
+        addonAmount:             { type: Number, default: 0 }, // subscriptionAddon total
         subtotal:                { type: Number, default: 0 }, // before tax
 
         // ── Tax ─────────────────────────────────────────────────

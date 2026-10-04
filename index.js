@@ -16,14 +16,13 @@ import createAdminRoutes         from "./routes/adminRoutes.js";
 import subscriptionRoutes        from "./routes/TenantSubscriptionRoutes.js";
 import saasRoutes                from "./routes/DashboardRoutes.js";
 import monthlyBillingRoutes      from "./routes/MonthlyBillingRoutes.js";
-import pricingConfigRoutes       from "./routes/PricingConfig.routes.js";
-import sessionBillingRoutes      from "./routes/SessionBillingRoutes.js";
 import freeTrialPackageRoutes    from "./routes/FreeTrialPackage.routes.js";
 import distributorRoutes         from "./routes/distributor.routes.js";
 import faqRoutes                 from "./routes/faqRoutes.js";
 import contactRoutes             from "./routes/contactRoutes.js";
 import siteSettingsRoutes        from "./routes/siteSettingsRoutes.js";
 import uploadRoutes              from "./routes/uploadRoutes.js";
+import supplierRoutes            from "./routes/SupplierRoutes.js";
 
 /* ── Tenant Middleware ── */
 import { tenantMiddleware }  from "./middleware/tenant.middleware.js";
@@ -97,13 +96,12 @@ app.use("/api/subscriptionPlan",    subscriptionPlanRoutes);
 app.use("/api/upload",              uploadRoutes);
 app.use("/api/saas",                saasRoutes);
 app.use("/api/monthly-billing",     monthlyBillingRoutes);
-app.use("/api/pricing-config",      pricingConfigRoutes);
 app.use("/api/faq",                 faqRoutes);
 app.use("/api/contact",             contactRoutes);
 app.use("/api/site-settings",       siteSettingsRoutes);
 app.use("/api/subscription",        subscriptionRoutes);
 app.use("/api/free-trial-packages", freeTrialPackageRoutes);
-app.use("/api/session-billing",     sessionBillingRoutes);
+app.use("/api/suppliers",           supplierRoutes);
 
 /* ══════════════════════════════════════════
    MULTI-TENANT MIDDLEWARE
@@ -135,33 +133,25 @@ app.get("/api/subscription-status", async (req, res) => {
     const now      = new Date();
     const endDate  = sub.currentPlan?.endDate;
     const daysLeft = endDate ? Math.ceil((new Date(endDate) - now) / 86400000) : null;
-    const usagePct = sub.totalStudentLimit > 0
-      ? Math.round(((sub.usedStudents || 0) / sub.totalStudentLimit) * 100) : 0;
 
     const warnings = [];
     if (daysLeft !== null && daysLeft <= 30 && daysLeft > 0) warnings.push("EXPIRING_SOON");
     if (daysLeft !== null && daysLeft <= 0)                  warnings.push("EXPIRED");
-    if (usagePct >= 90)                                       warnings.push("LIMIT_CRITICAL");
-    else if (usagePct >= 70)                                  warnings.push("LIMIT_WARNING");
     if (sub.paidStatus === "OVERDUE")                         warnings.push("PAYMENT_OVERDUE");
     if (sub.paidStatus === "UNPAID")                          warnings.push("PAYMENT_UNPAID");
 
     return res.status(200).json({
       success: true,
       data: {
-        hasSubscription:   true,
-        status:            sub.status,
-        planName:          sub.currentPlan?.name,
-        billingCycle:      sub.currentPlan?.billingCycle,
+        hasSubscription: true,
+        status:          sub.status,
+        planName:        sub.currentPlan?.name,
+        billingCycle:    sub.currentPlan?.billingCycle,
         endDate,
-        daysLeft:          daysLeft !== null ? Math.max(0, daysLeft) : null,
-        totalStudentLimit: sub.totalStudentLimit,
-        usedStudents:      sub.usedStudents || 0,
-        remaining:         sub.totalStudentLimit > 0
-          ? Math.max(0, sub.totalStudentLimit - (sub.usedStudents || 0)) : "unlimited",
-        usagePercent: usagePct,
-        paidStatus:   sub.paidStatus,
-        dueDate:      sub.dueDate,
+        daysLeft:        daysLeft !== null ? Math.max(0, daysLeft) : null,
+        totalAmount:     sub.totalAmount || 0,
+        paidStatus:      sub.paidStatus,
+        dueDate:         sub.dueDate,
         warnings,
       },
     });

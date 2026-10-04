@@ -50,8 +50,6 @@ export const getTenantDashboard = asyncHandler(async (req, res) => {
                     },
                 },
                 totalRevenue: { $sum: "$currentPlan.price" },
-                totalStudentLimit: { $sum: "$totalStudentLimit" },
-                totalUsedStudents: { $sum: "$usedStudents" },
             },
         },
     ]);
@@ -60,8 +58,6 @@ export const getTenantDashboard = asyncHandler(async (req, res) => {
         totalSubscriptions: 0,
         activeSubscriptions: 0,
         totalRevenue: 0,
-        totalStudentLimit: 0,
-        totalUsedStudents: 0,
     };
 
     return res.status(200).json(

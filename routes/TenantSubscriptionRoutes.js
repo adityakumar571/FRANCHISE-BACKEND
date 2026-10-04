@@ -14,9 +14,7 @@ import {
   addAddon,
   removeAddon,
   cancelSubscription,
-  syncUsedStudents,
   getPortalSubscription,
-  fixTrialLimits,
 } from "../controllers/TenantSubscriptionController.js";
 
 const router = Router();
@@ -34,9 +32,6 @@ router.post("/admin-assign",   verifyMainJWT, adminAssignPlan);
 
 router.get("/",                verifyMainJWT, getSubscription);
 
-// Fix existing trial subscriptions — set studentLimit to 350 where it's 0 (one-time utility)
-router.patch("/fix-trial-limits", verifyMainJWT, fixTrialLimits);
-
 router.patch("/:id/mark-paid", verifyMainJWT, markSubscriptionPaid);
 
 // Upgrade active plan
@@ -48,9 +43,6 @@ router.delete("/:tenantId/addon/:addonId", verifyMainJWT, removeAddon);
 
 // Cancel subscription
 router.patch("/:tenantId/cancel",    verifyMainJWT, cancelSubscription);
-
-// Re-sync usedStudents count from actual DB (admin utility)
-router.post("/:tenantId/sync-students", verifyMainJWT, syncUsedStudents);
 
 // ── YEARLY INSTALLMENT ROUTES ─────────────────────────────────────────────────
 router.get("/:tenantId/installments",                                    verifyMainJWT, getInstallments);

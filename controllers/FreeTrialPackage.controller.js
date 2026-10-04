@@ -32,7 +32,6 @@ export const createFreeTrialPackage = asyncHandler(async (req, res) => {
         name,
         description,
         durationDays,
-        studentLimit,
         features,
         isDefault,
         eligibleOnce,
@@ -45,21 +44,16 @@ export const createFreeTrialPackage = asyncHandler(async (req, res) => {
     if (!durationDays || Number(durationDays) < 1) {
         return res.status(400).json(new apiResponse(400, null, "Trial duration (durationDays) must be at least 1 day"));
     }
-    if (studentLimit !== undefined && Number(studentLimit) < 1) {
-        return res.status(400).json(new apiResponse(400, null, "Student limit must be at least 1"));
-    }
 
     const existing = await FreeTrialPackage.findOne({ name: name.trim() });
     if (existing) {
         return res.status(400).json(new apiResponse(400, null, "A free trial package with this name already exists"));
     }
 
-    // If isDefault = true, the pre-save hook will unset all others
     const pkg = await FreeTrialPackage.create({
         name:         name.trim(),
         description:  description || "",
         durationDays: Number(durationDays),
-        studentLimit: studentLimit !== undefined ? Number(studentLimit) : 350,
         features:     Array.isArray(features) ? features : [],
         isDefault:    isDefault === true || isDefault === "true",
         eligibleOnce: eligibleOnce !== false && eligibleOnce !== "false",
@@ -152,7 +146,6 @@ export const updateFreeTrialPackage = asyncHandler(async (req, res) => {
         name,
         description,
         durationDays,
-        studentLimit,
         features,
         eligibleOnce,
         isActive,
@@ -174,13 +167,7 @@ export const updateFreeTrialPackage = asyncHandler(async (req, res) => {
         }
         pkg.durationDays = Number(durationDays);
     }
-    if (studentLimit !== undefined) {
-        if (Number(studentLimit) < 1) {
-            return res.status(400).json(new apiResponse(400, null, "studentLimit must be at least 1"));
-        }
-        pkg.studentLimit = Number(studentLimit);
-    }
-    if (Array.isArray(features))   pkg.features     = features;
+    if (Array.isArray(features))    pkg.features     = features;
     if (eligibleOnce !== undefined) pkg.eligibleOnce = eligibleOnce === true || eligibleOnce === "true";
     if (isActive !== undefined)     pkg.isActive     = isActive === true || isActive === "true";
 
@@ -362,14 +349,12 @@ export const assignFreeTrialToSchool = asyncHandler(async (req, res) => {
     subscription.isTrial      = true;
     subscription.trialEndDate = trialEnd;
     subscription.status       = "TRIAL";
-    subscription.totalStudentLimit = pkg.studentLimit;
 
     // Populate currentPlan with trial package info (no planId since it's a trial)
     subscription.currentPlan = {
         name:         pkg.name,
         price:        0,
         originalPrice: 0,
-        studentLimit: pkg.studentLimit,
         startDate:    now,
         endDate:      trialEnd,
         billingCycle: "Trial",
@@ -382,13 +367,12 @@ export const assignFreeTrialToSchool = asyncHandler(async (req, res) => {
 
     // History entry
     subscription.history.push({
-        type:         "TRIAL_START",
-        name:         pkg.name,
-        price:        0,
-        studentLimit: pkg.studentLimit,
-        startDate:    now,
-        endDate:      trialEnd,
-        createdAt:    now,
+        type:      "TRIAL_START",
+        name:      pkg.name,
+        price:     0,
+        startDate: now,
+        endDate:   trialEnd,
+        createdAt: now,
     });
 
     await subscription.save();
@@ -398,14 +382,13 @@ export const assignFreeTrialToSchool = asyncHandler(async (req, res) => {
             200,
             {
                 tenantId,
-                schoolName:    tenant.schoolName,
-                packageId:     pkg._id,
-                packageName:   pkg.name,
-                durationDays:  pkg.durationDays,
-                studentLimit:  pkg.studentLimit,
+                schoolName:     tenant.schoolName,
+                packageId:      pkg._id,
+                packageName:    pkg.name,
+                durationDays:   pkg.durationDays,
                 trialStartDate: now,
-                trialEndDate:  trialEnd,
-                status:        subscription.status,
+                trialEndDate:   trialEnd,
+                status:         subscription.status,
             },
             `Free trial "${pkg.name}" assigned to "${tenant.schoolName}" successfully`
         )

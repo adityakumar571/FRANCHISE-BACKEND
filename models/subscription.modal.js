@@ -28,15 +28,9 @@ const PlanSchema = new mongoose.Schema(
             default: "Monthly",
         },
 
-        // Hard cap on student count
-        studentLimit: {
-            type: Number,
-            default: 0,   // 0 means unlimited
-        },
-
         // ── School Size Target ──────────────────────────────────
         // Just for display / filtering on pricing page
-        targetSchoolSize: {
+        targetSize: {
             type: String,
             enum: ["Small", "Medium", "Large", "Enterprise", "Any"],
             default: "Any",

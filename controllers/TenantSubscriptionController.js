@@ -46,7 +46,7 @@ const getRazorpayInstance = () => {
 /* ─────────────────────────────────────────────
    ADMIN ASSIGN PLAN
    POST /api/subscription/admin-assign
-   Body: { tenantId, planId, studentCount?, totalAmount?,
+   Body: { tenantId, planId, totalAmount?,
            paidStatus?, billingMonth?, dueDate?, paymentRef? }
 ───────────────────────────────────────────────── */
 export const adminAssignPlan = asyncHandler(async (req, res) => {
@@ -54,7 +54,6 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
   let {
     tenantId,
     planId,
-    studentCount,
     totalAmount,
     paidStatus = "PENDING",
     billingMonth,
@@ -80,42 +79,23 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
   if (plan.billingCycle === "Yearly") endDate.setFullYear(endDate.getFullYear() + 1);
   else                                endDate.setMonth(endDate.getMonth() + 1);
 
-  /* ── amounts ── */
-  studentCount = studentCount != null ? Number(studentCount) : null;
+  const finalAmount = plan.price;
 
-  // Always use the plan's defined price and student limit
-  const finalStudentLimit = plan.studentLimit;
-  const finalAmount       = plan.price;
-
-  // ── Fetch existing subscription to preserve addons ──────────────────────────
-  // PEHLE addons fetch karo taaki installments mein bhi addon price reflect ho
+  // ── Fetch existing subscription to preserve addons ──
   const existingSubscription = await TenantSubscription.findOne({
     tenantId: new mongoose.Types.ObjectId(tenantId),
   }).lean();
 
   const preservedAddons = existingSubscription?.currentAddons || [];
 
-  const addonStudentLimit = preservedAddons.reduce(
-    (sum, a) => sum + (a.studentLimit || 0) * (a.quantity || 1),
-    0
-  );
-
-  // Existing addons ka price bhi totalAmount mein add karo
-  // IMPORTANT: addon ki billingCycle vs plan ki billingCycle mismatch handle karo
   const addonTotalPrice = preservedAddons.reduce(
     (sum, a) => sum + effectiveAddonPrice(a.price, a.billingCycle, plan.billingCycle, a.quantity || 1),
     0
   );
 
-  // totalStudentLimit = base plan limit + all existing addons
-  const finalTotalStudentLimit = finalStudentLimit + addonStudentLimit;
-
-  // totalAmount = base plan price + existing addons price
   const finalTotalAmount = finalAmount + addonTotalPrice;
 
   /* ── yearly: 12 installments ── */
-  // NOTE: finalTotalAmount use karo (base plan + addons) taaki installments mein
-  // addon price bhi reflect ho
   let installments = [];
   if (plan.billingCycle === "Yearly" && finalTotalAmount > 0) {
     const monthlyAmt  = Math.round(finalTotalAmount / 12);
@@ -123,13 +103,11 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
       ? new Date(billingMonth + "-01")
       : new Date(startDate.getFullYear(), startDate.getMonth(), 1);
 
-    // Agar paidStatus === "PAID" toh sab installments bhi PAID mark karo
-    // (school ne pura saal ka ek baar mein de diya)
-    const instStatus = paidStatus === "PAID" ? "PAID" : "PENDING";
+    const instStatus   = paidStatus === "PAID" ? "PAID" : "PENDING";
     const instPaidDate = paidStatus === "PAID" ? new Date() : undefined;
 
     for (let i = 0; i < 12; i++) {
-      const d = new Date(startMonth.getFullYear(), startMonth.getMonth() + i, 1);
+      const d   = new Date(startMonth.getFullYear(), startMonth.getMonth() + i, 1);
       const ym  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const due = new Date(d.getFullYear(), d.getMonth(), 7);
       const inst = {
@@ -149,20 +127,18 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
       planId:       plan._id,
       name:         plan.name,
       price:        finalAmount,
-      studentLimit: finalStudentLimit,
       billingCycle: plan.billingCycle,
       startDate,
       endDate,
     },
-    totalStudentLimit: finalTotalStudentLimit,  // base + addons
-    totalAmount:       finalTotalAmount,         // base price + addons price
-    status:            "ACTIVE",
+    totalAmount:   finalTotalAmount,
+    status:        "ACTIVE",
     paidStatus,
-    billingMonth:      billingMonth  || null,
-    dueDate:           dueDate       ? new Date(dueDate) : null,
-    paymentRef:        paymentRef    || null,
+    billingMonth:  billingMonth || null,
+    dueDate:       dueDate      ? new Date(dueDate) : null,
+    paymentRef:    paymentRef   || null,
     installments,
-    isTrial:           false,
+    isTrial:       false,
   };
 
   if (paidStatus === "PAID") updatePayload.paidDate = new Date();
@@ -173,11 +149,10 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
       $set:  updatePayload,
       $push: {
         history: {
-          type:         "PLAN_PURCHASE",
-          planId:       plan._id,
-          name:         plan.name,
-          price:        finalAmount,
-          studentLimit: finalStudentLimit,
+          type:      "PLAN_PURCHASE",
+          planId:    plan._id,
+          name:      plan.name,
+          price:     finalAmount,
           startDate,
           endDate,
         },
@@ -189,7 +164,6 @@ export const adminAssignPlan = asyncHandler(async (req, res) => {
   return res.status(200).json(new apiResponse(200, subscription, "Subscription assigned successfully"));
   } catch (err) {
     console.error("❌ adminAssignPlan ERROR:", err?.message);
-    console.error("❌ adminAssignPlan STACK:", err?.stack);
     return res.status(500).json(new apiResponse(500, null, err?.message || "Internal error"));
   }
 });
@@ -298,13 +272,13 @@ export const getSubscription = asyncHandler(async (req, res) => {
   if (planType)     postMatch["currentPlanDetails.planType"]     = planType;
   if (Object.keys(postMatch).length) pipeline.push({ $match: postMatch });
 
-  /* school name search (post-lookup) */
+  /* franchise name search (post-lookup) */
   if (search.trim()) {
     pipeline.push({
       $match: {
         $or: [
-          { "currentPlan.name":        { $regex: search.trim(), $options: "i" } },
-          { "tenantDetails.schoolName":{ $regex: search.trim(), $options: "i" } },
+          { "currentPlan.name":            { $regex: search.trim(), $options: "i" } },
+          { "tenantDetails.schoolName":    { $regex: search.trim(), $options: "i" } },
         ],
       },
     });
@@ -506,22 +480,23 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     {
       $set: {
         currentPlan: {
-          planId: plan._id, name: plan.name, price: plan.price,
-          pricingModel: plan.pricingModel || "FIXED",
-          studentLimit: plan.studentLimit, billingCycle: plan.billingCycle,
-          startDate, endDate,
+          planId:      plan._id,
+          name:        plan.name,
+          price:       plan.price,
+          billingCycle: plan.billingCycle,
+          startDate,
+          endDate,
         },
-        totalStudentLimit: plan.studentLimit,
-        totalAmount:       plan.price,
-        status:            "ACTIVE",
-        paidStatus:        "PAID",
-        paidDate:          new Date(),
-        isTrial:           false,
+        totalAmount: plan.price,
+        status:      "ACTIVE",
+        paidStatus:  "PAID",
+        paidDate:    new Date(),
+        isTrial:     false,
       },
       $push: {
         history: {
           type: "PLAN_PURCHASE", planId: plan._id, name: plan.name,
-          price: plan.price, studentLimit: plan.studentLimit, startDate, endDate,
+          price: plan.price, startDate, endDate,
           razorpayPaymentId: razorpay_payment_id,
         },
       },
@@ -537,7 +512,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
 /* ─────────────────────────────────────────────
    UPGRADE PLAN
    POST /api/subscription/:tenantId/upgrade
-   Body: { planId, studentCount?, totalAmount?, paidStatus?, paymentRef? }
+   Body: { planId, totalAmount?, paidStatus?, paymentRef? }
    - Saves current plan to history as PLAN_UPGRADE
    - Replaces currentPlan with new plan
    - Re-generates yearly installments if applicable
@@ -546,7 +521,6 @@ export const upgradePlan = asyncHandler(async (req, res) => {
   const { tenantId } = req.params;
   let {
     planId,
-    studentCount,
     totalAmount,
     paidStatus = "PENDING",
     paymentRef,
@@ -570,26 +544,8 @@ export const upgradePlan = asyncHandler(async (req, res) => {
   if (plan.billingCycle === "Yearly") endDate.setFullYear(endDate.getFullYear() + 1);
   else                                endDate.setMonth(endDate.getMonth() + 1);
 
-  studentCount        = studentCount != null ? Number(studentCount) : null;
+  const finalAmount = plan.price;
 
-  // FIXED → always use plan's defined limit; PER_STUDENT → use committed student count
-  const finalLimit =
-    plan.pricingModel === "PER_STUDENT"
-      ? (studentCount && studentCount > 0 ? studentCount : plan.studentLimit)
-      : plan.studentLimit;
-
-  // FIXED → always use plan.price; PER_STUDENT → use calculated totalAmount from frontend
-  const finalAmount =
-    plan.pricingModel === "PER_STUDENT"
-      ? (totalAmount != null && totalAmount >= 0 ? Number(totalAmount) : plan.price)
-      : plan.price;
-
-  // Existing addons ka price bhi new totalAmount mein add karo
-  // IMPORTANT: billing cycle mismatch handle karo
-  const addonStudentLimit = (subscription.currentAddons || []).reduce(
-    (sum, a) => sum + (a.studentLimit || 0) * (a.quantity || 1),
-    0
-  );
   const addonTotalPrice = (subscription.currentAddons || []).reduce(
     (sum, a) => sum + effectiveAddonPrice(a.price, a.billingCycle, plan.billingCycle, a.quantity || 1),
     0
@@ -597,7 +553,6 @@ export const upgradePlan = asyncHandler(async (req, res) => {
   const finalTotalAmount = finalAmount + addonTotalPrice;
 
   /* ── yearly installments ── */
-  // NOTE: finalTotalAmount use karo (base plan + addons) taaki installments mein addon price bhi reflect ho
   let installments = [];
   if (plan.billingCycle === "Yearly" && finalTotalAmount > 0) {
     const monthlyAmt = Math.round(finalTotalAmount / 12);
@@ -623,36 +578,30 @@ export const upgradePlan = asyncHandler(async (req, res) => {
   }
 
   subscription.history.push({
-    type:         "PLAN_UPGRADE",
-    planId:       plan._id,
-    name:         plan.name,
-    price:        finalAmount,
-    studentLimit: finalLimit,
+    type:      "PLAN_UPGRADE",
+    planId:    plan._id,
+    name:      plan.name,
+    price:     finalAmount,
     startDate,
     endDate,
   });
 
   subscription.currentPlan = {
-    planId:       plan._id,
-    name:         plan.name,
-    price:        finalAmount,
-    pricingModel: plan.pricingModel || "FIXED",
-    studentLimit: finalLimit,          // base plan limit only
+    planId:      plan._id,
+    name:        plan.name,
+    price:       finalAmount,
     billingCycle: plan.billingCycle,
     startDate,
     endDate,
   };
 
-  // Recalculate totalStudentLimit = new plan base limit + existing addons
-  // This preserves addons the school already purchased during an upgrade
-  subscription.totalStudentLimit = finalLimit + addonStudentLimit;
-  subscription.totalAmount       = finalTotalAmount;  // base + addons
-  subscription.status            = "ACTIVE";
-  subscription.paidStatus        = paidStatus;
-  subscription.installments      = installments;
-  subscription.isTrial           = false;
+  subscription.totalAmount  = finalTotalAmount;
+  subscription.status       = "ACTIVE";
+  subscription.paidStatus   = paidStatus;
+  subscription.installments = installments;
+  subscription.isTrial      = false;
   if (paidStatus === "PAID") {
-    subscription.paidDate  = new Date();
+    subscription.paidDate   = new Date();
     subscription.paymentRef = paymentRef || null;
   }
 
@@ -696,25 +645,12 @@ export const addAddon = asyncHandler(async (req, res) => {
       addonId:      addon._id,
       name:         addon.name,
       price:        addon.price,
-      studentLimit: addon.studentLimit,
-      billingCycle: addon.billingCycle || "Monthly",  // ← addon ki cycle save karo
+      billingCycle: addon.billingCycle || "Monthly",
       quantity:     Number(quantity),
     });
   }
 
-  /* recalculate totalStudentLimit */
-  const addonStudentLimit = subscription.currentAddons.reduce(
-    (sum, a) => sum + (a.studentLimit || 0) * (a.quantity || 1),
-    0
-  );
-  subscription.totalStudentLimit =
-    (subscription.currentPlan?.studentLimit || 0) + addonStudentLimit;
-
-  /* recalculate totalAmount = base plan price + effective addon prices
-     IMPORTANT: billing cycle mismatch handle karo
-     Monthly addon on Yearly plan → price × 12
-     Yearly addon on Monthly plan → price ÷ 12
-  */
+  /* recalculate totalAmount = base plan price + effective addon prices */
   const planCycle = subscription.currentPlan?.billingCycle || "Monthly";
   const addonTotalPrice = subscription.currentAddons.reduce(
     (sum, a) => sum + effectiveAddonPrice(a.price, a.billingCycle, planCycle, a.quantity || 1),
@@ -752,21 +688,19 @@ export const addAddon = asyncHandler(async (req, res) => {
   }
 
   subscription.history.push({
-    type:         "ADDON_PURCHASE",
-    planId:       addon._id,
-    name:         addon.name,
-    price:        addon.price * Number(quantity),
-    studentLimit: addon.studentLimit * Number(quantity),
-    quantity:     Number(quantity),
+    type:     "ADDON_PURCHASE",
+    planId:   addon._id,
+    name:     addon.name,
+    price:    addon.price * Number(quantity),
+    quantity: Number(quantity),
   });
 
   await subscription.save();
 
   return res.status(200).json(
     new apiResponse(200, {
-      currentAddons:     subscription.currentAddons,
-      totalStudentLimit: subscription.totalStudentLimit,
-      totalAmount:       subscription.totalAmount,
+      currentAddons: subscription.currentAddons,
+      totalAmount:   subscription.totalAmount,
     }, "Addon added successfully")
   );
 });
@@ -793,16 +727,7 @@ export const removeAddon = asyncHandler(async (req, res) => {
   if (subscription.currentAddons.length === before)
     return res.status(404).json(new apiResponse(404, null, "Addon not found in current subscription"));
 
-  /* recalculate totalStudentLimit */
-  const addonStudentLimitAfter = subscription.currentAddons.reduce(
-    (sum, a) => sum + (a.studentLimit || 0) * (a.quantity || 1),
-    0
-  );
-  subscription.totalStudentLimit =
-    (subscription.currentPlan?.studentLimit || 0) + addonStudentLimitAfter;
-
-  /* recalculate totalAmount = base plan price + remaining addon prices
-     IMPORTANT: billing cycle mismatch handle karo */
+  /* recalculate totalAmount = base plan price + remaining addon prices */
   const planCycleAfter = subscription.currentPlan?.billingCycle || "Monthly";
   const addonTotalPriceAfter = subscription.currentAddons.reduce(
     (sum, a) => sum + effectiveAddonPrice(a.price, a.billingCycle, planCycleAfter, a.quantity || 1),
@@ -839,9 +764,8 @@ export const removeAddon = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     new apiResponse(200, {
-      currentAddons:     subscription.currentAddons,
-      totalStudentLimit: subscription.totalStudentLimit,
-      totalAmount:       subscription.totalAmount,
+      currentAddons: subscription.currentAddons,
+      totalAmount:   subscription.totalAmount,
     }, "Addon removed successfully")
   );
 });
@@ -878,39 +802,12 @@ export const cancelSubscription = asyncHandler(async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────
-   SYNC USED STUDENTS (admin utility)
-   POST /api/subscription/:tenantId/sync-students
-   Counts actual enrolled students in the tenant DB and syncs usedStudents.
-   Useful for correcting count drift.
-───────────────────────────────────────────────── */
-export const syncUsedStudents = asyncHandler(async (req, res) => {
-  const { tenantId } = req.params;
-
-  if (!isValidId(tenantId))
-    return res.status(400).json(new apiResponse(400, null, "Invalid tenantId"));
-
-  /* We need the tenant's DB connection to count students */
-  /* The admin request goes through tenantMiddleware — but for this
-     admin-only route, we accept an optional ?dbUri param OR rely on
-     the tenant model to look it up */
-  // Student enrolment model has been removed (franchise system).
-  // Return a no-op response so existing callers don't break.
-  return res.status(200).json(
-    new apiResponse(200, {
-      usedStudents:      0,
-      totalStudentLimit: 0,
-      remaining:         "unlimited",
-    }, "usedStudents sync not applicable (franchise system)")
-  );
-});
-
-/* ─────────────────────────────────────────────
    PORTAL — GET MY SUBSCRIPTION
    GET /api/subscription/portal/my-subscription
    Auth: verifyPortalJWT  (req.tenantId set by portal middleware)
 
-   Returns full subscription info for the school's portal:
-   - Current plan name, status, usage, days left
+   Returns full subscription info for the franchise's portal:
+   - Current plan name, status, days left
    - Installments (if yearly)
    - Last 20 history events
    - All available plans (for upgrade prompt)
@@ -964,14 +861,14 @@ export const getPortalSubscription = asyncHandler(async (req, res) => {
     .filter((i) => i.status === "PAID")
     .reduce((s, i) => s + (i.amount || 0), 0);
 
-  /* available plans for upgrade (higher studentLimit or different cycle) */
+  /* available plans for upgrade */
   const availablePlans = await SubscriptionPlan.find({ isActive: true, planType: "Plan" })
     .sort({ sortOrder: 1, price: 1 })
-    .select("name description price pricingModel pricePerStudent billingCycle studentLimit features isPopular yearlyDiscountPercent");
+    .select("name description price billingCycle features isPopular yearlyDiscountPercent");
 
   const availableAddons = await SubscriptionPlan.find({ isActive: true, planType: "Addon" })
     .sort({ sortOrder: 1 })
-    .select("name description price studentLimit features");
+    .select("name description price features");
 
   return res.status(200).json(
     new apiResponse(200, {
@@ -995,22 +892,14 @@ export const getPortalSubscription = asyncHandler(async (req, res) => {
       },
 
       usage: {
-        totalStudentLimit: subscription.totalStudentLimit,
-        usedStudents:      subscription.usedStudents,
-        remaining:         subscription.totalStudentLimit === 0
-          ? "unlimited"
-          : Math.max(0, subscription.totalStudentLimit - subscription.usedStudents),
-        percentUsed: subscription.totalStudentLimit > 0
-          ? Math.round((subscription.usedStudents / subscription.totalStudentLimit) * 100)
-          : 0,
+        totalAmount: subscription.totalAmount,
       },
 
       addons: (subscription.currentAddons || []).map((a) => ({
-        addonId:      a.addonId,
-        name:         a.name,
-        price:        a.price,
-        studentLimit: a.studentLimit,
-        quantity:     a.quantity,
+        addonId:  a.addonId,
+        name:     a.name,
+        price:    a.price,
+        quantity: a.quantity,
       })),
 
       billing: {
@@ -1042,7 +931,6 @@ export const getPortalSubscription = asyncHandler(async (req, res) => {
           type:              h.type,
           name:              h.name,
           price:             h.price,
-          studentLimit:      h.studentLimit,
           startDate:         h.startDate,
           endDate:           h.endDate,
           razorpayPaymentId: h.razorpayPaymentId || null,
@@ -1052,37 +940,5 @@ export const getPortalSubscription = asyncHandler(async (req, res) => {
       availablePlans,
       availableAddons,
     }, "Subscription details fetched")
-  );
-});
-
-/* ─────────────────────────────────────────────
-   FIX TRIAL LIMITS (admin one-time utility)
-   PATCH /api/subscription/fix-trial-limits
-   Sabhi existing TRIAL subscriptions jinki
-   totalStudentLimit = 0 hai unhe 350 pe set karo.
-───────────────────────────────────────────────── */
-export const fixTrialLimits = asyncHandler(async (req, res) => {
-  const LIMIT = Number(req.body?.limit) || 350;
-
-  // Fix ALL subscriptions (TRIAL or already EXPIRED trial) where studentLimit is 0
-  const result = await TenantSubscription.updateMany(
-    {
-      isTrial:           true,        // only trial subscriptions
-      totalStudentLimit: 0,           // only those with 0 (unlimited) limit
-    },
-    {
-      $set: {
-        totalStudentLimit:           LIMIT,
-        "currentPlan.studentLimit":  LIMIT,
-      },
-    }
-  );
-
-  return res.status(200).json(
-    new apiResponse(200, {
-      matched:  result.matchedCount,
-      modified: result.modifiedCount,
-      limit:    LIMIT,
-    }, `${result.modifiedCount} trial subscription(s) updated to ${LIMIT} student limit.`)
   );
 });
