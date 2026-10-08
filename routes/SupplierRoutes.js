@@ -12,13 +12,13 @@ const router = express.Router()
 const supplierValidationRules = [
   body('companyName')
     .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Company name must be between 2 and 100 characters'),
+    .notEmpty()
+    .withMessage('Company name is required'),
   
   body('contactPerson')
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Contact person name must be between 2 and 50 characters'),
+    .notEmpty()
+    .withMessage('Contact person name is required'),
   
   body('email')
     .isEmail()
@@ -30,27 +30,29 @@ const supplierValidationRules = [
     .withMessage('Password must be at least 6 characters long'),
   
   body('phone')
-    .isMobilePhone('en-IN')
-    .withMessage('Please provide a valid Indian phone number'),
+    .trim()
+    .matches(/^[0-9]{10}$/)
+    .withMessage('Please provide a valid 10-digit phone number'),
   
   body('address.street')
     .trim()
-    .isLength({ min: 5, max: 200 })
-    .withMessage('Street address must be between 5 and 200 characters'),
+    .notEmpty()
+    .withMessage('Street address is required'),
   
   body('address.city')
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('City must be between 2 and 50 characters'),
+    .notEmpty()
+    .withMessage('City is required'),
   
   body('address.state')
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('State must be between 2 and 50 characters'),
+    .notEmpty()
+    .withMessage('State is required'),
   
   body('address.pincode')
-    .isPostalCode('IN')
-    .withMessage('Please provide a valid Indian pincode'),
+    .trim()
+    .matches(/^[0-9]{6}$/)
+    .withMessage('Please provide a valid 6-digit pincode'),
   
   body('businessType')
     .isIn(['Manufacturer', 'Distributor', 'Retailer', 'Wholesaler', 'Service Provider'])
@@ -79,8 +81,9 @@ const registrationValidationRules = [
     .withMessage('Password must be at least 6 characters long'),
   
   body('phone')
-    .isMobilePhone('en-IN')
-    .withMessage('Please provide a valid Indian phone number'),
+    .trim()
+    .matches(/^[0-9]{10}$/)
+    .withMessage('Please provide a valid 10-digit phone number'),
   
   body('address.street')
     .trim()

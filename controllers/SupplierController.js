@@ -89,13 +89,20 @@ class SupplierController {
     try {
       const errors = validationResult(req)
       if (!errors.isEmpty()) {
+        console.log('❌ Validation errors:', JSON.stringify(errors.array(), null, 2))
         return apiError(res, 400, false, 'Validation failed', errors.array())
       }
 
       // Only Super Admin can create suppliers directly
-      if (req.user.accountType !== 'Super Admin') {
+      // Support both 'role' (from User model) and 'accountType' fields
+      const userRole = (req.user.role || req.user.accountType || '').replace(/\s+/g, '').toLowerCase()
+      const isSuperAdmin = userRole === 'superadmin'
+      
+      if (!isSuperAdmin) {
         return apiError(res, 403, false, 'Only Super Admin can create suppliers')
       }
+
+      console.log('✅ Creating supplier with data:', JSON.stringify(req.body, null, 2))
 
       const supplierData = {
         ...req.body,
@@ -114,6 +121,8 @@ class SupplierController {
 
       const populatedSupplier = await Supplier.findById(supplier._id)
         .populate('createdBy', 'name email')
+
+      console.log('✅ Supplier created successfully:', supplier._id)
 
       return res.status(201).json(
         new apiResponse(201, populatedSupplier, 'Supplier created successfully by Super Admin')

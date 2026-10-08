@@ -1,12 +1,29 @@
 import express from 'express'
 import FranchiseSupplierController from '../controllers/FranchiseSupplierController.js'
-import { verifyJWT, authorizeUserType } from '../middleware/authTypeMiddleware.js'
+import { verifyMainJWT, authorizeMainUserType } from '../middleware/authTypeMiddlewareMain.js'
 
 const router = express.Router()
 
-// Apply auth middleware - only authenticated franchise users (NOT Super Admin)
-router.use(verifyJWT)
-router.use(authorizeUserType('Admin', 'Manager', 'Staff'))
+// Use MAIN DB authentication (not tenant DB)
+// This allows both Super Admin and regular franchise admins to access global suppliers
+
+// Test endpoint to check auth
+router.get('/test-auth', verifyMainJWT, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Auth working!',
+    user: {
+      id: req.user._id,
+      role: req.user.role || req.user.accountType,
+      name: req.user.name
+    }
+  })
+})
+
+// Apply MAIN auth middleware - franchise admins or super admin
+router.use(verifyMainJWT)
+// Allow both Super Admin and regular Admin roles
+router.use(authorizeMainUserType('Super Admin', 'SuperAdmin', 'Admin'))
 
 // Get all active suppliers (for franchise admins to view)
 router.get('/suppliers', FranchiseSupplierController.getActiveSuppliers)

@@ -7,7 +7,11 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const verifyMainJWT = asyncHandler(async (req, res, next) => {
     try {
         // Get the token from cookies or Authorization header
-        const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+        // Support multiple cookie names: accessToken (Super Admin), multitenant (Tenant Admin), LMS (legacy)
+        const token = req.cookies?.accessToken || 
+                     req.cookies?.multitenant || 
+                     req.cookies?.LMS || 
+                     req.header("Authorization")?.replace("Bearer ", "");
 
 
 
@@ -21,7 +25,7 @@ export const verifyMainJWT = asyncHandler(async (req, res, next) => {
 
 
 
-        // Find the user associated with the token
+        // Find the user associated with the token from MAIN database
         const user = await User.findById(decodedToken?.userId)
             .select("-password -authToken"); // Don't return sensitive fields like password and authToken
         console.log("TOKEN =>", token);
@@ -47,8 +51,17 @@ export const authorizeMainUserType = (...allowedTypes) => {
                 return apiError(res, 401, false, "Unauthorized access: No user data available");
             }
 
-            // Check if the user's accountType is in the allowedTypes array
-            if (!allowedTypes.includes(req.user.accountType)) {
+            // Check if the user's role is in the allowedTypes array
+            // Support both "Super Admin" (with space) and "SuperAdmin" (without space)
+            const userRole = req.user.role || req.user.accountType;
+            const normalizedUserRole = userRole?.replace(/\s+/g, ''); // Remove spaces
+            
+            const hasAccess = allowedTypes.some(allowedType => {
+                const normalizedAllowedType = allowedType?.replace(/\s+/g, '');
+                return normalizedUserRole === normalizedAllowedType;
+            });
+
+            if (!hasAccess) {
                 return apiError(res, 403, false, "Forbidden: You do not have access to this resource");
             }
 

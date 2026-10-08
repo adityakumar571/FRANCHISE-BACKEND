@@ -9,12 +9,7 @@ import {
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
 } from '../../../controllers/tenant/franchise/medicineController.js';
 
-import {
-  getSuppliers, createSupplier, updateSupplier, getSupplierById,
-  getSupplierLedger, getSupplierOutstanding, getPaymentHistory, recordPayment,
-  // New supplier routes (path-alias fix)
-  getSupplierPayments, recordSupplierPayment,
-} from '../../../controllers/tenant/franchise/supplierController.js';
+// ❌ REMOVED: Tenant supplier imports - using global suppliers only
 
 import {
   getCustomers, createCustomer, updateCustomer, getCustomerById, deleteCustomer,
@@ -72,17 +67,9 @@ router.get('/generic-mapping',              getGenericMapping);
 router.get('/rack-management',              getRackManagement);
 router.put('/rack-management/:rackId',      assignMedicineRack);
 
-// ── Suppliers ─────────────────────────────────────────────────────────────────
-router.get('/suppliers',                    getSuppliers);
-router.post('/suppliers',                   createSupplier);
-router.put('/suppliers/:id',                updateSupplier);
-router.get('/suppliers/:id',                getSupplierById);
-router.get('/suppliers/:id/ledger',         getSupplierLedger);
-router.get('/suppliers/:id/outstanding',    getSupplierOutstanding);
-router.get('/suppliers/:id/payment-history',getPaymentHistory);
-router.post('/suppliers/:id/payment',       recordPayment);
-router.get('/suppliers/:id/payments',       getSupplierPayments);     // ← NEW: path alias
-router.post('/suppliers/:id/payments',      recordSupplierPayment);   // ← NEW: path alias
+// ❌ REMOVED: Tenant Supplier Routes
+// Suppliers are now global - managed through /api/suppliers
+// Franchises can only VIEW global suppliers, not create/manage locally
 
 // ── Customers ─────────────────────────────────────────────────────────────────
 router.get('/customers',                         getCustomers);

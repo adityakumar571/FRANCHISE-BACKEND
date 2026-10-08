@@ -7,7 +7,9 @@
     "start": "node index.js",
     "dev": "set NODE_ENV=development& nodemon index.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/ --forceExit",
-    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/ --coverage --forceExit"
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/ --coverage --forceExit",
+    "seed:supplier-products": "node scripts/seedSupplierProducts.js",
+    "seed:supplier-orders": "node scripts/seedSupplierOrders.js"
   },
   "jest": {
     "testEnvironment": "node",

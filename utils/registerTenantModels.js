@@ -48,7 +48,8 @@ import { getTestimonialsModel } from "../models/tenant/Testimonials.model.js";
 // ── Franchise Pharmacy Models ─────────────────────────────────────────────────
 import { getMedicineModel }             from "../models/tenant/franchise/Medicine.model.js";
 import { getMedicineBatchModel }        from "../models/tenant/franchise/MedicineBatch.model.js";
-import { getSupplierModel }             from "../models/tenant/franchise/Supplier.model.js";
+// ❌ REMOVED: Tenant Supplier - using global suppliers only
+// import { getSupplierModel }             from "../models/tenant/franchise/Supplier.model.js";
 import { getSaleInvoiceModel }          from "../models/tenant/franchise/SaleInvoice.model.js";
 import { getPurchaseInvoiceModel }      from "../models/tenant/franchise/PurchaseInvoice.model.js";
 import { getCustomerModel }             from "../models/tenant/franchise/Customer.model.js";
@@ -127,7 +128,7 @@ export const registerTenantModels = (db) => {
     // ── Franchise Pharmacy Models ─────────────────────────────────────────────
     getMedicineModel(db);
     getMedicineBatchModel(db);
-    getSupplierModel(db);
+    // ❌ REMOVED: getSupplierModel(db) - using global suppliers
     getSaleInvoiceModel(db);
     getPurchaseInvoiceModel(db);
     getCustomerModel(db);

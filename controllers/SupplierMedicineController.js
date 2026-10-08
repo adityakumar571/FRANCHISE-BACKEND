@@ -2,6 +2,7 @@ import Supplier from '../models/Supplier.model.js'
 import { validationResult } from 'express-validator'
 import { apiError } from '../utils/apiError.js'
 import { apiResponse } from '../utils/apiResponse.js'
+import { syncMedicineToAllFranchises, removeMedicineFromAllFranchises } from '../utils/syncSupplierMedicines.js'
 
 class SupplierMedicineController {
   // Get all medicines for the supplier
@@ -141,8 +142,14 @@ class SupplierMedicineController {
 
       const addedMedicine = supplier.medicines[supplier.medicines.length - 1]
 
+      // ✨ AUTO-SYNC TO ALL FRANCHISES
+      console.log('[MEDICINE] Starting auto-sync to all franchises...')
+      syncMedicineToAllFranchises(supplier, addedMedicine)
+        .then(result => console.log('[MEDICINE] Auto-sync completed:', result))
+        .catch(err => console.error('[MEDICINE] Auto-sync failed:', err))
+
       return res.status(201).json(
-        new apiResponse(201, addedMedicine, 'Medicine added successfully')
+        new apiResponse(201, addedMedicine, 'Medicine added successfully and syncing to all franchises')
       )
     } catch (error) {
       console.error('Add medicine error:', error)
@@ -176,8 +183,14 @@ class SupplierMedicineController {
 
       await supplier.save()
 
+      // ✨ AUTO-SYNC UPDATE TO ALL FRANCHISES
+      console.log('[MEDICINE] Starting update sync to all franchises...')
+      syncMedicineToAllFranchises(supplier, medicine)
+        .then(result => console.log('[MEDICINE] Update sync completed:', result))
+        .catch(err => console.error('[MEDICINE] Update sync failed:', err))
+
       return res.status(200).json(
-        new apiResponse(200, medicine, 'Medicine updated successfully')
+        new apiResponse(200, medicine, 'Medicine updated successfully and syncing to all franchises')
       )
     } catch (error) {
       console.error('Update medicine error:', error)
@@ -200,11 +213,19 @@ class SupplierMedicineController {
         return apiError(res, 404, false, 'Medicine not found')
       }
 
+      const medicineName = medicine.name
+
       medicine.remove()
       await supplier.save()
 
+      // ✨ REMOVE FROM ALL FRANCHISES
+      console.log('[MEDICINE] Removing medicine from all franchises...')
+      removeMedicineFromAllFranchises(supplier._id, medicineName)
+        .then(() => console.log('[MEDICINE] Medicine removed from all franchises'))
+        .catch(err => console.error('[MEDICINE] Removal failed:', err))
+
       return res.status(200).json(
-        new apiResponse(200, null, 'Medicine deleted successfully')
+        new apiResponse(200, null, 'Medicine deleted successfully and removed from all franchises')
       )
     } catch (error) {
       console.error('Delete medicine error:', error)

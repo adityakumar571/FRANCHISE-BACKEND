@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { apiError } from '../utils/apiError.js'
-import Supplier from '../models/Supplier.model.js'
+import Supplier from '../models/Supplier.model.js'  // Global Supplier model
 import { asyncHandler } from '../utils/asyncHandler.js'
 
 export const verifySupplierJWT = asyncHandler(async (req, res, next) => {
@@ -21,7 +21,7 @@ export const verifySupplierJWT = asyncHandler(async (req, res, next) => {
       return apiError(res, 401, false, "Invalid token type")
     }
 
-    // Find supplier
+    // ✅ Find supplier in GLOBAL DB (not tenant DB)
     const supplier = await Supplier.findById(decoded.supplierId).select('-password')
     
     if (!supplier) {
@@ -30,7 +30,7 @@ export const verifySupplierJWT = asyncHandler(async (req, res, next) => {
 
     // Check if supplier is active
     if (supplier.status !== 'Active') {
-      return apiError(res, 403, false, `Account is ${supplier.status.toLowerCase()}. Please contact support.`)
+      return apiError(res, 403, false, `Account is ${supplier.status}. Please contact support.`)
     }
 
     req.supplier = supplier

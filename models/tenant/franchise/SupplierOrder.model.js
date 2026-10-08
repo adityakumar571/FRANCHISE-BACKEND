@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const supplierOrderSchema = new mongoose.Schema(
   {
@@ -186,7 +186,7 @@ const supplierOrderSchema = new mongoose.Schema(
 // Generate unique order ID
 supplierOrderSchema.pre('save', async function (next) {
   if (!this.orderId) {
-    const count = await mongoose.model('SupplierOrder').countDocuments();
+    const count = await this.constructor.countDocuments();
     this.orderId = `SO${String(count + 1).padStart(6, '0')}`;
   }
   next();
@@ -204,6 +204,13 @@ supplierOrderSchema.pre('save', function (next) {
   next();
 });
 
-const SupplierOrder = mongoose.model('SupplierOrder', supplierOrderSchema);
+export const getSupplierOrderModel = (db) => {
+  // Check if model already exists in the connection
+  if (db.models['SupplierOrder']) {
+    return db.models['SupplierOrder'];
+  }
+  // Create and return the model
+  return db.model('SupplierOrder', supplierOrderSchema);
+};
 
-module.exports = SupplierOrder;
+export default getSupplierOrderModel;

@@ -9,22 +9,29 @@ import {
     loginAsTenantUser,
     franchiseLogin,
 } from "../controllers/tenant.controller.js";
+import { verifyMainJWT, authorizeMainUserType } from "../middleware/authTypeMiddlewareMain.js";
 
 const router = express.Router();
 
-router.post("/", registerTenant);
+// ⚠️ PROTECTED: Only Super Admin can create franchises
+router.post("/", verifyMainJWT, authorizeMainUserType('Super Admin'), registerTenant);
 
-router.get("/", getAllTenants);
+// ⚠️ PROTECTED: Only Super Admin can view all franchises
+router.get("/", verifyMainJWT, authorizeMainUserType('Super Admin'), getAllTenants);
 
-// Login as franchise admin/superadmin — returns JWT token for that tenant user
-router.post("/:id/login-as", loginAsTenantUser);
+// ⚠️ PROTECTED: Only Super Admin can login as franchise user
+router.post("/:id/login-as", verifyMainJWT, authorizeMainUserType('Super Admin'), loginAsTenantUser);
 
-router.get("/:id", getTenantById);
+// ⚠️ PROTECTED: Only Super Admin can view franchise details
+router.get("/:id", verifyMainJWT, authorizeMainUserType('Super Admin'), getTenantById);
 
-router.put("/:id", updateTenant);
+// ⚠️ PROTECTED: Only Super Admin can update franchise
+router.put("/:id", verifyMainJWT, authorizeMainUserType('Super Admin'), updateTenant);
 
-router.delete("/:id", deleteTenant);
+// ⚠️ PROTECTED: Only Super Admin can delete franchise
+router.delete("/:id", verifyMainJWT, authorizeMainUserType('Super Admin'), deleteTenant);
 
-router.patch("/toggle-status/:id", toggleTenantStatus);
+// ⚠️ PROTECTED: Only Super Admin can toggle franchise status
+router.patch("/toggle-status/:id", verifyMainJWT, authorizeMainUserType('Super Admin'), toggleTenantStatus);
 
 export default router;
