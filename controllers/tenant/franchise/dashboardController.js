@@ -203,6 +203,8 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/dashboard/live-rates?medicine=
+// ⚠️ DEPRECATED: This endpoint uses TENANT-SPECIFIC suppliers (wrong!)
+// ✅ USE INSTEAD: /api/franchise-suppliers/medicines/compare/:name (main supplier API)
 // Returns wholesale supplier comparison (static for now — will be dynamic)
 // ────────────────────────────────────────────────────────────────────────────
 export const getDashboardLiveRates = asyncHandler(async (req, res) => {

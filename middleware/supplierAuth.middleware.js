@@ -10,14 +10,22 @@ export const verifySupplierJWT = asyncHandler(async (req, res, next) => {
       req.cookies?.supplierToken ||
       req.header("Authorization")?.replace("Bearer ", "")
 
+    console.log('🔐 [verifySupplierJWT] Checking supplier token...')
+    console.log('🔐 Cookie token exists:', !!req.cookies?.supplierToken)
+    console.log('🔐 Header token exists:', !!req.header("Authorization"))
+
     if (!token) {
+      console.log('❌ [verifySupplierJWT] No token found')
       return apiError(res, 401, false, "Access denied. No token provided.")
     }
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     
+    console.log('🔐 [verifySupplierJWT] Token decoded:', { type: decoded.type, supplierId: decoded.supplierId })
+    
     if (decoded.type !== 'supplier') {
+      console.log('❌ [verifySupplierJWT] Invalid token type:', decoded.type)
       return apiError(res, 401, false, "Invalid token type")
     }
 
@@ -25,18 +33,21 @@ export const verifySupplierJWT = asyncHandler(async (req, res, next) => {
     const supplier = await Supplier.findById(decoded.supplierId).select('-password')
     
     if (!supplier) {
+      console.log('❌ [verifySupplierJWT] Supplier not found:', decoded.supplierId)
       return apiError(res, 401, false, "Token is valid but supplier not found")
     }
 
     // Check if supplier is active
     if (supplier.status !== 'Active') {
+      console.log('❌ [verifySupplierJWT] Supplier inactive:', supplier.status)
       return apiError(res, 403, false, `Account is ${supplier.status}. Please contact support.`)
     }
 
+    console.log('✅ [verifySupplierJWT] Supplier authenticated:', supplier.companyName)
     req.supplier = supplier
     next()
   } catch (error) {
-    console.error('Supplier JWT verification error:', error)
+    console.error('❌ [verifySupplierJWT] Error:', error.message)
     return apiError(res, 401, false, error?.message || "Invalid token")
   }
 })

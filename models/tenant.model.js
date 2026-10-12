@@ -209,4 +209,4 @@ tenantSchema.methods.isPasswordCorrect = async function (password) {
     return bcrypt.compare(password, this.portalPassword);
 };
 
-export default mongoose.model("Tenant", tenantSchema);
+export default mongoose.models.Tenant || mongoose.model("Tenant", tenantSchema);

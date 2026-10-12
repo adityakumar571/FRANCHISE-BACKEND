@@ -107,6 +107,10 @@ app.use("/api/suppliers",           supplierRoutes);
 import franchiseSupplierRoutes from "./routes/FranchiseSupplierRoutes.js";
 app.use("/api/franchise-suppliers", franchiseSupplierRoutes);
 
+/* Master Medicine routes - Public for autocomplete */
+import masterMedicineRoutes from "./routes/MasterMedicineRoutes.js";
+app.use("/api/master-medicines", masterMedicineRoutes);
+
 /* ══════════════════════════════════════════
    MULTI-TENANT MIDDLEWARE
 ══════════════════════════════════════════ */
@@ -187,7 +191,7 @@ import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRou
 
 app.use("/api/franchise/dashboard",   franchiseDashboardRoutes);
 app.use("/api/franchise/sales",       franchiseSalesRoutes);
-app.use("/api/franchise/purchase",    franchisePurchaseRoutes);
+// app.use("/api/franchise/purchase",    franchisePurchaseRoutes); // ← Disabled: Using fullPurchaseRoutes instead
 app.use("/api/franchise/purchase",    franchiseFullPurchaseRoutes);
 app.use("/api/franchise/inventory",   franchiseInventoryRoutes);
 app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);

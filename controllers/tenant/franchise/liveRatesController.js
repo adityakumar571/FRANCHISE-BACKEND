@@ -1,3 +1,16 @@
+/**
+ * ⚠️ DEPRECATED CONTROLLER - Uses TENANT-SPECIFIC suppliers (WRONG!)
+ * 
+ * ✅ CORRECT APPROACH: Use FranchiseSupplierController.js instead
+ * ✅ CORRECT API: /api/franchise-suppliers/medicines/compare/:name
+ * 
+ * This controller queries tenant database suppliers which should be empty.
+ * All medicine comparisons should use the main supplier database (cloudFranchaize.suppliers)
+ * with 3 global suppliers managed by Super Admin.
+ * 
+ * @deprecated Use FranchiseSupplierController instead
+ */
+
 /* eslint-disable */
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { apiResponse } from '../../../utils/apiResponse.js';

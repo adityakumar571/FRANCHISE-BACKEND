@@ -54,7 +54,8 @@ class FranchiseSupplierController {
               companyName: '$companyName',
               contactPerson: '$contactPerson',
               email: '$email',
-              phone: '$phone'
+              phone: '$phone',
+              rating: '$rating'
             }
           }
         },
@@ -133,6 +134,134 @@ class FranchiseSupplierController {
     } catch (error) {
       console.error('Get all medicines error:', error)
       return apiError(res, 500, false, 'Failed to fetch medicines', error.message)
+    }
+  }
+
+  // NEW: Get medicine comparison across suppliers
+  async getMedicineComparison(req, res) {
+    try {
+      const { medicineName } = req.params
+      
+      if (!medicineName) {
+        return apiError(res, 400, false, 'Medicine name is required')
+      }
+
+      const pipeline = [
+        // Match only active suppliers
+        { $match: { status: 'Active' } },
+        
+        // Unwind medicines array
+        { $unwind: '$medicines' },
+        
+        // Match medicines by GENERIC NAME (for accurate comparison across brands)
+        // Also match by name for flexibility
+        {
+          $match: {
+            $and: [
+              { 'medicines.isAvailable': true },
+              {
+                $or: [
+                  { 'medicines.genericName': { $regex: medicineName, $options: 'i' } },
+                  { 'medicines.name': { $regex: medicineName, $options: 'i' } }
+                ]
+              }
+            ]
+          }
+        },
+        
+        // Project required fields with calculated delivery estimate
+        {
+          $project: {
+            supplierInfo: {
+              _id: '$_id',
+              companyName: '$companyName',
+              contactPerson: '$contactPerson',
+              email: '$email',
+              phone: '$phone',
+              rating: { $ifNull: ['$rating', 0] },
+              city: '$address.city',
+              state: '$address.state'
+            },
+            medicine: {
+              _id: '$medicines._id',
+              name: '$medicines.name',
+              genericName: '$medicines.genericName',
+              manufacturer: '$medicines.manufacturer',
+              category: '$medicines.category',
+              strength: '$medicines.strength',
+              packSize: '$medicines.packSize',
+              mrp: '$medicines.mrp',
+              supplierPrice: '$medicines.supplierPrice',
+              discount: { 
+                $round: [
+                  { 
+                    $multiply: [
+                      { 
+                        $divide: [
+                          { $subtract: ['$medicines.mrp', '$medicines.supplierPrice'] },
+                          '$medicines.mrp'
+                        ]
+                      },
+                      100
+                    ]
+                  },
+                  2
+                ]
+              },
+              gst: { $round: [{ $multiply: ['$medicines.supplierPrice', 0.12] }, 2] }, // 12% GST
+              effectiveRate: { $round: [{ $multiply: ['$medicines.supplierPrice', 1.12] }, 2] }, // Price + GST
+              stock: '$medicines.stock',
+              scheme: { $ifNull: ['$medicines.scheme', 'No Scheme'] },
+              expiryDate: '$medicines.expiryDate',
+              deliveryEstimate: {
+                $cond: {
+                  if: { $gte: ['$medicines.stock', 100] },
+                  then: 'Same Day',
+                  else: 'Next Day'
+                }
+              }
+            }
+          }
+        },
+        
+        // Sort by effective rate (lowest first)
+        { $sort: { 'medicine.effectiveRate': 1 } }
+      ]
+
+      const results = await Supplier.aggregate(pipeline)
+
+      if (results.length === 0) {
+        return res.status(200).json(
+          new apiResponse(200, [], 'No medicines found with this name')
+        )
+      }
+
+      // Mark best price
+      if (results.length > 0) {
+        results[0].isBestPrice = true
+      }
+
+      // Calculate price comparison stats
+      const prices = results.map(r => r.medicine.effectiveRate)
+      const stats = {
+        count: results.length,
+        lowestPrice: Math.min(...prices),
+        highestPrice: Math.max(...prices),
+        averagePrice: parseFloat((prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2)),
+        priceDifference: parseFloat((Math.max(...prices) - Math.min(...prices)).toFixed(2)),
+        savingsPercentage: ((Math.max(...prices) - Math.min(...prices)) / Math.max(...prices) * 100).toFixed(2)
+      }
+
+      return res.status(200).json(
+        new apiResponse(200, {
+          medicineName,
+          suppliers: results,
+          comparison: stats
+        }, 'Medicine comparison data fetched successfully')
+      )
+    } catch (error) {
+      console.error('Compare medicines error:', error)
+      return apiError(res, 500, false, 'Failed to compare medicines', error.message)
     }
   }
 

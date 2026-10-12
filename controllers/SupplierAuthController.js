@@ -321,6 +321,66 @@ class SupplierAuthController {
       return apiError(res, 500, false, 'Failed to fetch dashboard stats', error.message)
     }
   }
+
+  // Quick Login (for Super Admin to login as supplier)
+  async quickLogin(req, res) {
+    try {
+      console.log('🔐 Quick Login Request:', {
+        supplierId: req.params.supplierId,
+        user: req.user,
+        headers: req.headers
+      })
+
+      const { supplierId } = req.params
+
+      // Find supplier
+      const supplier = await Supplier.findById(supplierId)
+      if (!supplier) {
+        console.log('❌ Supplier not found:', supplierId)
+        return apiError(res, 404, false, 'Supplier not found')
+      }
+
+      console.log('✅ Supplier found:', supplier.companyName)
+
+      // Generate JWT token
+      const token = jwt.sign(
+        {
+          supplierId: supplier._id,
+          type: 'supplier',
+          email: supplier.email,
+          companyName: supplier.companyName
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      )
+
+      console.log('✅ Token generated:', token.substring(0, 50) + '...')
+
+      // Update last login without triggering validation
+      await Supplier.updateOne(
+        { _id: supplier._id },
+        { $set: { lastLogin: new Date() } }
+      )
+
+      // Remove sensitive data
+      const supplierData = supplier.toObject()
+      delete supplierData.password
+      delete supplierData.passwordResetToken
+      delete supplierData.passwordResetExpires
+
+      console.log('✅ Quick login successful for:', supplier.companyName)
+
+      return res.status(200).json(
+        new apiResponse(200, {
+          token,
+          supplier: supplierData
+        }, 'Quick login successful')
+      )
+    } catch (error) {
+      console.error('❌ Quick login error:', error)
+      return apiError(res, 500, false, 'Quick login failed', error.message)
+    }
+  }
 }
 
 export default new SupplierAuthController()

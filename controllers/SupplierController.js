@@ -66,10 +66,13 @@ class SupplierController {
     }
   }
 
-  // Get supplier by ID
+  // Get supplier by ID with medicines
   async getSupplierById(req, res) {
     try {
-      const supplier = await Supplier.findById(req.params.id)
+      // Handle both :id and :supplierId params
+      const supplierId = req.params.supplierId || req.params.id
+
+      const supplier = await Supplier.findById(supplierId)
         .populate('createdBy approvedBy', 'name email')
       
       if (!supplier) {
@@ -225,6 +228,103 @@ class SupplierController {
       )
     } catch (error) {
       return apiError(res, 500, false, 'Failed to delete supplier', error.message)
+    }
+  }
+
+  // Add medicine to supplier
+  async addMedicineToSupplier(req, res) {
+    try {
+      const { supplierId } = req.params
+      const medicineData = req.body
+
+      console.log('Adding medicine to supplier:', supplierId)
+      console.log('Medicine data:', medicineData)
+
+      const supplier = await Supplier.findById(supplierId)
+
+      if (!supplier) {
+        return apiError(res, 404, false, 'Supplier not found')
+      }
+
+      // Initialize medicines array if not exists
+      if (!supplier.medicines) {
+        supplier.medicines = []
+      }
+
+      // Add medicine to supplier's medicines array
+      supplier.medicines.push(medicineData)
+      
+      await supplier.save()
+
+      return res.status(200).json(
+        new apiResponse(200, supplier, 'Medicine added successfully')
+      )
+    } catch (error) {
+      console.error('Add medicine error:', error)
+      return apiError(res, 500, false, 'Failed to add medicine', error.message)
+    }
+  }
+
+  // Update medicine in supplier
+  async updateMedicine(req, res) {
+    try {
+      const { supplierId, medicineId } = req.params
+      const medicineData = req.body
+
+      const supplier = await Supplier.findById(supplierId)
+
+      if (!supplier) {
+        return apiError(res, 404, false, 'Supplier not found')
+      }
+
+      const medicineIndex = supplier.medicines.findIndex(
+        (med) => med._id.toString() === medicineId
+      )
+
+      if (medicineIndex === -1) {
+        return apiError(res, 404, false, 'Medicine not found')
+      }
+
+      // Update medicine
+      supplier.medicines[medicineIndex] = {
+        ...supplier.medicines[medicineIndex].toObject(),
+        ...medicineData,
+      }
+
+      await supplier.save()
+
+      return res.status(200).json(
+        new apiResponse(200, supplier, 'Medicine updated successfully')
+      )
+    } catch (error) {
+      console.error('Update medicine error:', error)
+      return apiError(res, 500, false, 'Failed to update medicine', error.message)
+    }
+  }
+
+  // Delete medicine from supplier
+  async deleteMedicine(req, res) {
+    try {
+      const { supplierId, medicineId } = req.params
+
+      const supplier = await Supplier.findById(supplierId)
+
+      if (!supplier) {
+        return apiError(res, 404, false, 'Supplier not found')
+      }
+
+      supplier.medicines = supplier.medicines.filter(
+        (med) => med._id.toString() !== medicineId
+      )
+
+      await supplier.save()
+
+      return res.status(200).json(
+        new apiResponse(200, supplier, 'Medicine deleted successfully')
+      )
+    } catch (error) {
+      console.error('Delete medicine error:', error)
+      return apiError(res, 500, false, 'Failed to delete medicine', error.message)
     }
   }
 }

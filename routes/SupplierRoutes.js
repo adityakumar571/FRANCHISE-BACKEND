@@ -3,6 +3,7 @@ import { body } from 'express-validator'
 import SupplierAuthController from '../controllers/SupplierAuthController.js'
 import SupplierMedicineController from '../controllers/SupplierMedicineController.js'
 import SupplierController from '../controllers/SupplierController.js'
+import * as SupplierOrderController from '../controllers/SupplierOrderController.js'
 import { verifySupplierJWT, checkSupplierStatus } from '../middleware/supplierAuth.middleware.js'
 import { verifyMainJWT, authorizeMainUserType } from '../middleware/authTypeMiddlewareMain.js'
 
@@ -172,6 +173,7 @@ router.post('/auth/reset-password/:token', [
 router.use('/auth', verifySupplierJWT)
 router.use('/medicines', verifySupplierJWT, checkSupplierStatus('Active'))
 router.use('/dashboard', verifySupplierJWT, checkSupplierStatus('Active'))
+router.use('/orders', verifySupplierJWT, checkSupplierStatus('Active'))
 
 // Auth routes (protected)
 router.get('/auth/profile', SupplierAuthController.getProfile)
@@ -183,7 +185,13 @@ router.post('/auth/change-password', [
 router.post('/auth/logout', SupplierAuthController.logout)
 
 // Dashboard routes
-router.get('/dashboard/stats', SupplierAuthController.getDashboardStats)
+router.get('/dashboard/stats', SupplierOrderController.getSupplierDashboardStats)
+
+// Order management routes
+router.get('/orders', SupplierOrderController.getSupplierOrders)
+router.get('/orders/:id', SupplierOrderController.getOrderById)
+router.put('/orders/:id/status', SupplierOrderController.updateOrderStatus)
+router.post('/orders/:id/dispatch', SupplierOrderController.dispatchOrder)
 
 // Medicine management routes
 router.get('/medicines', SupplierMedicineController.getMedicines)
@@ -207,8 +215,17 @@ router.get('/admin/list', SupplierController.getAllSuppliers)
 router.get('/admin/stats', SupplierController.getSupplierStats)
 router.get('/admin/:id', SupplierController.getSupplierById)
 
+// Quick login as supplier (Super Admin only)
+router.post('/admin/:supplierId/quick-login', SupplierAuthController.quickLogin)
+
 // Create new supplier (Super Admin only)
 router.post('/admin/create', supplierValidationRules, SupplierController.createSupplier)
+
+// Medicine management for suppliers (Super Admin only)
+router.get('/:supplierId', SupplierController.getSupplierById)
+router.post('/:supplierId/medicines', SupplierController.addMedicineToSupplier)
+router.put('/:supplierId/medicines/:medicineId', SupplierController.updateMedicine)
+router.delete('/:supplierId/medicines/:medicineId', SupplierController.deleteMedicine)
 
 // Update supplier status
 router.patch('/admin/:id/status', SupplierController.updateSupplierStatus)

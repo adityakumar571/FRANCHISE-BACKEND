@@ -8,6 +8,7 @@ import { getPurchaseReturnModel } from '../../../models/tenant/franchise/Purchas
 import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.model.js';
 import { getMedicineBatchModel } from '../../../models/tenant/franchise/MedicineBatch.model.js';
 import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.model.js';
+import Supplier from '../../../models/Supplier.model.js'; // ← GLOBAL Supplier Model (where medicines are stored)
 
 // ────────────────────────────────────────────────────────────────────────────
 // Seed Supplier Data
@@ -269,19 +270,61 @@ export const getPurchaseOrders = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// POST /api/franchise/purchase-orders
+// POST /api/franchise/purchase/orders - Create new Purchase Order
 // ────────────────────────────────────────────────────────────────────────────
 export const createPurchaseOrder = asyncHandler(async (req, res) => {
-  const { supplierId, supplier, items, expectedDate, notes } = req.body;
-  if (!supplier || !items?.length) return res.status(400).json(new apiResponse(400, null, 'Supplier and items are required'));
+  const { supplierId, supplierName, items, expectedDeliveryDate, notes } = req.body;
+  
+  console.log('📦 Received PO creation request:', { supplierId, supplierName, itemsCount: items?.length });
+  
+  if (!supplierName || !items?.length) {
+    return res.status(400).json(new apiResponse(400, null, 'Supplier name and items are required'));
+  }
 
   const PurchaseOrder = getPurchaseOrderModel(req.db);
+  
+  // Generate PO number
   const count = await PurchaseOrder.countDocuments();
   const poNo  = `PO-${String(count + 2402).padStart(4, '0')}`;
-  const totalAmount = items.reduce((s, i) => s + (i.amount || 0), 0);
+  
+  // Calculate total amount from items
+  const totalAmount = items.reduce((sum, item) => {
+    const itemTotal = (item.quantity || 0) * (item.purchasePrice || 0);
+    return sum + itemTotal;
+  }, 0);
 
-  const po = await PurchaseOrder.create({ poNo, supplierId, supplier, items, totalAmount, expectedDate, notes, status: 'pending' });
-  return res.status(201).json(new apiResponse(201, { _id: po._id, poNo: po.poNo }, 'Purchase order created'));
+  // Create the purchase order
+  const po = await PurchaseOrder.create({ 
+    poNo, 
+    supplierId, 
+    supplier: supplierName,
+    items: items.map(item => ({
+      medicineId: item.medicineId,
+      medicineName: item.medicineName,
+      salt: item.salt,
+      formulation: item.formulation,
+      qty: item.quantity,
+      ptr: item.purchasePrice,
+      mrp: item.mrp,
+      scheme: item.scheme,
+      batchNo: item.batchNo,
+      expiryDate: item.expiryDate,
+      amount: (item.quantity || 0) * (item.purchasePrice || 0)
+    })),
+    totalAmount, 
+    expectedDate: expectedDeliveryDate ? new Date(expectedDeliveryDate) : undefined, 
+    notes, 
+    status: 'pending' 
+  });
+  
+  console.log('✅ PO created:', { _id: po._id, poNo: po.poNo });
+  
+  return res.status(201).json(new apiResponse(201, { 
+    _id: po._id, 
+    poNo: po.poNo,
+    totalAmount: po.totalAmount,
+    status: po.status
+  }, 'Purchase order created successfully'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -531,66 +574,96 @@ export const getPurchaseSupplierLedger = asyncHandler(async (req, res) => {
 // ── GET /api/franchise/purchase/live-rate?medicine=&supplierId=
 // Compare live rates for a medicine across suppliers in purchase context
 export const getPurchaseLiveRate = asyncHandler(async (req, res) => {
-  const { medicine = '', supplierId } = req.query;
-  const Medicine  = getMedicineModel(req.db);
-  const Supplier  = getSupplierModel(req.db);
-  const MedBatch  = getMedicineBatchModel(req.db);
+  const { medicine = '' } = req.query;
 
-  // Find matching medicines
-  const meds = await Medicine.find(
-    medicine
-      ? { $or: [{ name: new RegExp(medicine, 'i') }, { salt: new RegExp(medicine, 'i') }], isActive: true }
-      : { isActive: true }
-  ).limit(20).lean();
+  console.log('🔍 Searching medicine:', medicine);
 
-  // For each medicine, get batch pricing from different suppliers
-  const result = await Promise.all(meds.map(async (med) => {
-    const batches = await MedBatch.find({ medicineId: med._id, qty: { $gt: 0 } })
-      .sort({ purchasePrice: 1 }).lean();
+  if (!medicine || medicine.trim().length < 2) {
+    return res.status(200).json(new apiResponse(200, { medicines: [], total: 0 }, 'Please provide medicine name'));
+  }
 
-    // Get unique suppliers from batches
-    const supplierRates = [];
-    const seenSuppliers = new Set();
-    for (const batch of batches) {
-      const supId = String(batch.supplierId || '');
-      if (!seenSuppliers.has(supId) && supId) {
-        seenSuppliers.add(supId);
-        const sup = await Supplier.findById(batch.supplierId).select('name').lean();
-        supplierRates.push({
-          supplierId:    batch.supplierId,
-          supplierName:  sup?.name || 'Unknown',
-          purchasePrice: batch.purchasePrice || batch.mrp * 0.7,
-          mrp:           batch.mrp,
-          qty:           batch.qty,
-          batchNo:       batch.batchNo,
-          expiryDate:    batch.expiryDate,
-          discount:      batch.discount || 0,
-          scheme:        batch.scheme   || '',
+  // Find all GLOBAL suppliers who have this medicine (medicines are stored globally, not per-tenant)
+  // NOTE: isActive field may be undefined in some suppliers, so we check for both true and undefined
+  const suppliers = await Supplier.find({
+    $or: [
+      { isActive: true },
+      { isActive: { $exists: false } }
+    ],
+    'medicines.name': new RegExp(medicine.trim(), 'i')
+  }).lean();
+
+  console.log(`📦 Found ${suppliers.length} suppliers with medicine: ${medicine}`);
+
+  // Group medicines by name and collect supplier rates
+  const medicineMap = new Map();
+
+  suppliers.forEach(supplier => {
+    // Find matching medicines in this supplier's inventory
+    const matchingMeds = supplier.medicines.filter(med => 
+      new RegExp(medicine.trim(), 'i').test(med.name)
+    );
+
+    matchingMeds.forEach(med => {
+      const medKey = med.name.toLowerCase().trim();
+      
+      if (!medicineMap.has(medKey)) {
+        medicineMap.set(medKey, {
+          _id: med._id || supplier._id + '-' + med.name,
+          name: med.name,
+          salt: med.genericName || med.salt || '',
+          formulation: med.category || '',
+          mrp: med.mrp || 0,
+          supplierRates: []
         });
       }
-    }
 
-    return {
-      _id:           med._id,
-      name:          med.name,
-      salt:          med.salt,
-      formulation:   med.formulation,
-      mrp:           med.mrp,
-      currentStock:  med.currentStock,
-      reorderLevel:  med.reorderLevel,
-      supplierRates: supplierRates.length > 0 ? supplierRates : [{
-        supplierName:  'No supplier data',
-        purchasePrice: med.mrp * 0.7,
-        mrp:           med.mrp,
-        qty:           0,
-      }],
-      bestPrice: supplierRates.reduce((best, s) =>
-        s.purchasePrice < (best?.purchasePrice ?? Infinity) ? s : best, null
-      ),
-    };
-  }));
+      const medData = medicineMap.get(medKey);
+      medData.supplierRates.push({
+        supplierId: supplier._id,
+        supplierName: supplier.companyName || 'Unknown Supplier',
+        purchasePrice: med.supplierPrice || (med.mrp * 0.7),
+        mrp: med.mrp,
+        qty: med.stock || 0,
+        batchNo: med.batchNumber || '',
+        expiryDate: med.expiryDate || null,
+        discount: med.discount || 0,
+        scheme: med.scheme || '',
+      });
+    });
+  });
+
+  // Convert map to array
+  const result = Array.from(medicineMap.values());
+
+  console.log(`✅ Returning ${result.length} medicine(s) with supplier rates`);
 
   return res.status(200).json(new apiResponse(200, { medicines: result, total: result.length }, 'Live rates fetched'));
+});
+
+// ── DEBUG: GET /api/franchise/purchase/debug-suppliers
+// Check what suppliers exist and their medicines
+export const debugSuppliers = asyncHandler(async (req, res) => {
+  const allSuppliers = await Supplier.find({}).select('companyName email isActive medicines').lean();
+  
+  const summary = allSuppliers.map(s => ({
+    id: s._id,
+    name: s.companyName,
+    email: s.email,
+    isActive: s.isActive,
+    medicineCount: s.medicines?.length || 0,
+    medicines: s.medicines?.slice(0, 5).map(m => ({ 
+      name: m.name, 
+      stock: m.stock,
+      supplierPrice: m.supplierPrice,
+      mrp: m.mrp 
+    })) || []
+  }));
+
+  return res.status(200).json(new apiResponse(200, { 
+    totalSuppliers: allSuppliers.length,
+    activeSuppliers: allSuppliers.filter(s => s.isActive).length,
+    suppliers: summary 
+  }, 'Debug data'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────

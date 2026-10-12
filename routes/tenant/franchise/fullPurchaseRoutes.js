@@ -15,6 +15,7 @@ import {
   getSupplierLedgerSummary,
   getPurchaseSupplierLedger,
   getPurchaseLiveRate,
+  debugSuppliers,
 } from '../../../controllers/tenant/franchise/purchaseController.js';
 
 const router = express.Router();
@@ -45,5 +46,8 @@ router.get('/supplier-ledger-summary', getSupplierLedgerSummary);    // summary 
 
 // Live Rate Compare
 router.get('/live-rate',               getPurchaseLiveRate);
+
+// Debug endpoint
+router.get('/debug-suppliers',         debugSuppliers);
 
 export default router;
