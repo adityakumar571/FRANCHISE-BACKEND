@@ -198,6 +198,10 @@ app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);
 app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
 // ❌ REMOVED: app.use("/api/franchise/suppliers", franchiseSupplierRoutesNew);
+
+// ✅ Supplier orders route for franchise portal (uses global suppliers + tenant POs)
+app.use("/api/franchise/suppliers", supplierRoutes);
+
 app.use("/api/franchise",             franchiseRemainingRoutes);
 
 /* Tenant's own subscription info */
