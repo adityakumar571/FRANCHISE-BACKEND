@@ -246,20 +246,41 @@ export const getPurchaseOrders = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
 
   const skip = (Number(page) - 1) * Number(limit);
+  
+  // Fetch orders without sorting first (avoid sort errors on undefined dates)
   const [orders, total] = await Promise.all([
-    PurchaseOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+    PurchaseOrder.find(filter).skip(skip).limit(Number(limit)).lean(),
     PurchaseOrder.countDocuments(filter),
   ]);
+
+  // Sort in-memory to handle missing dates
+  orders.sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+  });
+
+  // Safe date formatting helper
+  const formatDate = (date) => {
+    if (!date) return '—';
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '—'; // Invalid date
+      return d.toISOString().split('T')[0];
+    } catch (e) {
+      return '—';
+    }
+  };
 
   const result = orders.map(o => ({
     _id:          o._id,
     poNo:         o.poNo,
     supplier:     o.supplier,
     items:        o.items?.length || 0,
-    totalAmount:  o.totalAmount,
-    status:       o.status,
-    createdAt:    new Date(o.createdAt).toISOString().split('T')[0],
-    expectedDate: o.expectedDate ? new Date(o.expectedDate).toISOString().split('T')[0] : '—',
+    totalAmount:  o.totalAmount || 0,
+    status:       o.status || 'pending',
+    createdAt:    formatDate(o.createdAt),
+    expectedDate: formatDate(o.expectedDate),
   }));
 
   return res.status(200).json(new apiResponse(200, {
@@ -334,7 +355,28 @@ export const getPurchaseOrderById = asyncHandler(async (req, res) => {
   const PurchaseOrder = getPurchaseOrderModel(req.db);
   const po = await PurchaseOrder.findById(req.params.id).lean();
   if (!po) return res.status(404).json(new apiResponse(404, null, 'Purchase order not found'));
-  return res.status(200).json(new apiResponse(200, po, 'Purchase order fetched'));
+  
+  // Safe date formatting
+  const formatDate = (date) => {
+    if (!date) return null;
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString().split('T')[0];
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Format response with safe dates
+  const formattedPO = {
+    ...po,
+    createdAt: formatDate(po.createdAt),
+    expectedDate: formatDate(po.expectedDate),
+    updatedAt: formatDate(po.updatedAt),
+  };
+
+  return res.status(200).json(new apiResponse(200, formattedPO, 'Purchase order fetched'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
