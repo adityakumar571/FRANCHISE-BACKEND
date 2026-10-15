@@ -9,7 +9,8 @@ import {
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
 } from '../../../controllers/tenant/franchise/medicineController.js';
 
-// ❌ REMOVED: Tenant supplier imports - using global suppliers only
+// ── Supplier Masters (shared Category / Unit / Company) ──
+import { getMasters, getAllMasters, createMaster, updateMaster, deleteMaster } from '../../../controllers/SupplierMasterController.js';
 
 import {
   getCustomers, createCustomer, updateCustomer, getCustomerById, deleteCustomer,
@@ -48,6 +49,14 @@ const router = express.Router();
 
 // ── Medicines ─────────────────────────────────────────────────────────────────
 router.get('/medicines/meta',               getMedicineMeta);         // ← NEW: dropdown data
+
+// ── Medicine Masters (Category / Unit / Company) — shared with Supplier Portal ──
+router.get('/medicines/masters/all',        getAllMasters);
+router.get('/medicines/masters',            getMasters);
+router.post('/medicines/masters',           createMaster);
+router.put('/medicines/masters/:id',        updateMaster);
+router.delete('/medicines/masters/:id',     deleteMaster);
+
 router.get('/medicines',                    getMedicines);
 router.post('/medicines',                   createMedicine);
 router.put('/medicines/:id',                updateMedicine);

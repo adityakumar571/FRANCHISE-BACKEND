@@ -6,6 +6,7 @@ import SupplierController from '../controllers/SupplierController.js'
 import * as SupplierOrderController from '../controllers/SupplierOrderController.js'
 import { verifySupplierJWT, checkSupplierStatus } from '../middleware/supplierAuth.middleware.js'
 import { verifyMainJWT, authorizeMainUserType } from '../middleware/authTypeMiddlewareMain.js'
+import { getMasters, getAllMasters, createMaster, updateMaster, deleteMaster } from '../controllers/SupplierMasterController.js'
 
 const router = express.Router()
 
@@ -172,8 +173,16 @@ router.post('/auth/reset-password/:token', [
 // ===== PROTECTED ROUTES (Supplier Authentication Required) =====
 router.use('/auth', verifySupplierJWT)
 router.use('/medicines', verifySupplierJWT, checkSupplierStatus('Active'))
+router.use('/masters', verifySupplierJWT, checkSupplierStatus('Active'))
 router.use('/dashboard', verifySupplierJWT, checkSupplierStatus('Active'))
 router.use('/orders', verifySupplierJWT, checkSupplierStatus('Active'))
+
+// ── Medicine Masters (Category / Unit / Company) ──
+router.get('/masters/all',  getAllMasters)           // GET all 3 types in one shot
+router.get('/masters',      getMasters)              // GET ?type=category|unit|company
+router.post('/masters',     createMaster)            // POST { type, name, description? }
+router.put('/masters/:id',  updateMaster)            // PUT { name?, description?, isActive? }
+router.delete('/masters/:id', deleteMaster)          // DELETE (soft)
 
 // Auth routes (protected)
 router.get('/auth/profile', SupplierAuthController.getProfile)
