@@ -18,7 +18,6 @@ import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.mode
 import { getMedicineBatchModel } from '../../../models/tenant/franchise/MedicineBatch.model.js';
 import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.model.js';
 import { getLiveWholesaleRateModel } from '../../../models/tenant/franchise/LiveWholesaleRate.model.js';
-import { getLiveOrderModel } from '../../../models/tenant/franchise/LiveOrder.model.js';
 import { getPurchaseOrderModel } from '../../../models/tenant/franchise/PurchaseOrder.model.js';
 
 // ── Seed live rates ──────────────────────────────────────────────────────────
@@ -62,16 +61,67 @@ const seedLiveRates = async (db) => {
 };
 
 const seedLiveOrders = async (db) => {
-  const LO = getLiveOrderModel(db);
-  if (await LO.countDocuments() > 0) return;
+  // Use PurchaseOrder instead of LiveOrder (unified tracking)
+  const PO = getPurchaseOrderModel(db);
+  if (await PO.countDocuments({ source: 'live_rates_module' }) > 0) return;
+  
   const Supplier = getSupplierModel(db);
   const sups = await Supplier.find().limit(4).lean();
   if (!sups.length) return;
-  await LO.insertMany([
-    { orderId: 'PO-2025-5862', supplierName: sups[0]?.name || 'Medico Agency',          items: [{medicineName:'Paracetamol 650mg',qty:50,price:15.95,amount:680}],  totalMRP:3000, discountAmt:300, gstAmt:120, grandTotal:2820, status:'In Transit',   createdAt: new Date(Date.now()-1*86400000) },
-    { orderId: 'PO-2025-5841', supplierName: sups[1]?.name || 'Life Care Distributors', items: [{medicineName:'Azithral 500 Tablet',qty:30,price:43,amount:1161.8}], totalMRP:5600, discountAmt:450, gstAmt:200, grandTotal:5350, status:'Delivered',    createdAt: new Date(Date.now()-3*86400000) },
-    { orderId: 'PO-2025-5820', supplierName: sups[2]?.name || 'Apollo Pharma',          items: [{medicineName:'Amoxicillin 500mg',qty:10,price:28,amount:492.8}],   totalMRP:1200, discountAmt:120, gstAmt:80,  grandTotal:1160, status:'Pending',      createdAt: new Date(Date.now()-6*86400000) },
-    { orderId: 'PO-2025-5801', supplierName: sups[3]?.name || 'Sunrise Pharmaceuticals',items: [{medicineName:'Metformin 500mg',qty:100,price:8,amount:800}],        totalMRP:8900, discountAmt:700, gstAmt:350, grandTotal:8550, status:'Delivered',    createdAt: new Date(Date.now()-11*86400000) },
+  
+  await PO.insertMany([
+    { 
+      poNo: 'LR-2025-1001', 
+      supplier: sups[0]?.name || 'Medico Agency',
+      items: [{medicineName:'Paracetamol 650mg',qty:50,ptr:15.95,mrp:0,scheme:'',amount:680}],
+      totalAmount: 2820,
+      totalMRP: 3000,
+      discountAmt: 300,
+      gstAmt: 120,
+      grandTotal: 2820,
+      status: 'In Transit',
+      source: 'live_rates_module',
+      createdAt: new Date(Date.now()-1*86400000)
+    },
+    { 
+      poNo: 'LR-2025-1002',
+      supplier: sups[1]?.name || 'Life Care Distributors',
+      items: [{medicineName:'Azithral 500 Tablet',qty:30,ptr:43,mrp:0,scheme:'',amount:1161.8}],
+      totalAmount: 5350,
+      totalMRP: 5600,
+      discountAmt: 450,
+      gstAmt: 200,
+      grandTotal: 5350,
+      status: 'Delivered',
+      source: 'live_rates_module',
+      createdAt: new Date(Date.now()-3*86400000)
+    },
+    { 
+      poNo: 'LR-2025-1003',
+      supplier: sups[2]?.name || 'Apollo Pharma',
+      items: [{medicineName:'Amoxicillin 500mg',qty:10,ptr:28,mrp:0,scheme:'',amount:492.8}],
+      totalAmount: 1160,
+      totalMRP: 1200,
+      discountAmt: 120,
+      gstAmt: 80,
+      grandTotal: 1160,
+      status: 'Pending',
+      source: 'live_rates_module',
+      createdAt: new Date(Date.now()-6*86400000)
+    },
+    { 
+      poNo: 'LR-2025-1004',
+      supplier: sups[3]?.name || 'Sunrise Pharmaceuticals',
+      items: [{medicineName:'Metformin 500mg',qty:100,ptr:8,mrp:0,scheme:'',amount:800}],
+      totalAmount: 8550,
+      totalMRP: 8900,
+      discountAmt: 700,
+      gstAmt: 350,
+      grandTotal: 8550,
+      status: 'Delivered',
+      source: 'live_rates_module',
+      createdAt: new Date(Date.now()-11*86400000)
+    },
   ]);
 };
 
@@ -307,28 +357,35 @@ export const placeOrder = asyncHandler(async (req, res) => {
   const { supplierId, supplierName, items, grandTotal, notes } = req.body;
   if (!items?.length) return res.status(400).json(new apiResponse(400, null, 'Items required'));
 
-  const LO    = getLiveOrderModel(req.db);
-  const count = await LO.countDocuments();
-  const orderId = `PO-${new Date().getFullYear()}-${String(count + 5901).padStart(4, '0')}`;
+  // Use PurchaseOrder instead of LiveOrder (unified order tracking)
+  const PO = getPurchaseOrderModel(req.db);
+  const count = await PO.countDocuments({ source: 'live_rates_module' });
+  const orderId = `LR-${new Date().getFullYear()}-${String(count + 1001).padStart(4, '0')}`;
 
-  const order = await LO.create({
-    orderId, supplierId, supplierName,
+  const order = await PO.create({
+    poNo: orderId,
+    supplierId,
+    supplier: supplierName,
     items: items.map(i => ({
       medicineName: i.name || i.medicineName,
-      packSize:     i.pack || i.packSize || '',
       qty:          Number(i.qty),
-      price:        Number(i.price || 0),
+      ptr:          Number(i.price || 0),
+      mrp:          0,
+      scheme:       '',
       amount:       Number(i.amount || 0),
     })),
-    totalMRP:    grandTotal,
-    discountAmt: 0,
-    gstAmt:      0,
-    grandTotal,
-    status: 'Pending', notes,
+    totalAmount:  grandTotal,
+    totalMRP:     grandTotal,
+    discountAmt:  0,
+    gstAmt:       0,
+    grandTotal:   grandTotal,
+    status:       'Pending',
+    source:       'live_rates_module', // Track order source
+    notes,
   });
 
   return res.status(201).json(new apiResponse(201, {
-    orderId:    order.orderId,
+    orderId:    order.poNo,
     _id:        order._id,
     grandTotal: order.grandTotal,
   }, 'Order placed successfully'));
@@ -338,12 +395,17 @@ export const placeOrder = asyncHandler(async (req, res) => {
 export const getOrderTracking = asyncHandler(async (req, res) => {
   await seedLiveOrders(req.db);
   const { orderId } = req.params;
-  const LO = getLiveOrderModel(req.db);
+  
+  // Use PurchaseOrder instead of LiveOrder (unified tracking)
+  const PO = getPurchaseOrderModel(req.db);
 
-  const orders = await LO.find().sort({ createdAt: -1 }).lean();
+  // Get only live rates module orders
+  const orders = await PO.find({ source: 'live_rates_module' })
+    .sort({ createdAt: -1 })
+    .lean();
 
   const order = orderId !== 'all'
-    ? orders.find(o => o.orderId === orderId || o._id.toString() === orderId)
+    ? orders.find(o => o.poNo === orderId || o._id.toString() === orderId)
     : null;
 
   const STATUS_STEPS = ['Pending', 'Confirmed', 'Packed', 'In Transit', 'Out for Delivery', 'Delivered'];
@@ -352,13 +414,13 @@ export const getOrderTracking = asyncHandler(async (req, res) => {
     const stepIdx = STATUS_STEPS.indexOf(o.status);
     return {
       _id:          o._id,
-      id:           o.orderId,
-      supplier:     o.supplierName,
+      id:           o.poNo,
+      supplier:     o.supplier,
       date:         new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       items:        o.items?.length || 0,
-      total:        o.totalMRP,
-      discount:     o.discountAmt,
-      amount:       o.grandTotal,
+      total:        o.totalMRP || o.totalAmount,
+      discount:     o.discountAmt || 0,
+      amount:       o.grandTotal || o.totalAmount,
       status:       o.status,
       trackingSteps: STATUS_STEPS.map((step, i) => ({
         label:  step,

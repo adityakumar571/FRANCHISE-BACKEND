@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .test { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; }
+        img { border: 2px solid #0891b2; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Medicine Image Loading Test</h1>
+    
+    <div class="test">
+        <h2>Test 1: Direct Backend URL</h2>
+        <p><code>http://localhost:9001/uploads/medicines/medicine-1792434664281-963596168.png</code></p>
+        <img 
+            src="http://localhost:9001/uploads/medicines/medicine-1792434664281-963596168.png" 
+            width="200" 
+            onload="document.getElementById('test1').innerHTML='✅ SUCCESS'" 
+            onerror="document.getElementById('test1').innerHTML='❌ FAILED'"
+        />
+        <p id="test1">⏳ Loading...</p>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: Through Vite Proxy (Relative URL)</h2>
+        <p><code>/uploads/medicines/medicine-1792434664281-963596168.png</code></p>
+        <img 
+            src="/uploads/medicines/medicine-1792434664281-963596168.png" 
+            width="200" 
+            onload="document.getElementById('test2').innerHTML='✅ SUCCESS'" 
+            onerror="document.getElementById('test2').innerHTML='❌ FAILED - Proxy issue!'"
+        />
+        <p id="test2">⏳ Loading...</p>
+    </div>
+
+    <div class="test">
+        <h2>Test 3: Frontend Component Style</h2>
+        <p>Same as used in React components</p>
+        <div style="width: 50px; height: 50px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb;">
+            <img 
+                src="/uploads/medicines/medicine-1792434664281-963596168.png"
+                style="width: 100%; height: 100%; object-fit: cover;"
+                onload="document.getElementById('test3').innerHTML='✅ SUCCESS'"
+                onerror="document.getElementById('test3').innerHTML='❌ FAILED'"
+            />
+        </div>
+        <p id="test3">⏳ Loading...</p>
+    </div>
+
+    <div class="test">
+        <h2>📊 Medicine Data Check</h2>
+        <button onclick="checkMedicine()">Fetch Medicine Data</button>
+        <pre id="medicineData" style="background: #f9f9f9; padding: 10px; border-radius: 4px; overflow: auto;"></pre>
+    </div>
+
+    <script>
+        async function checkMedicine() {
+            try {
+                const response = await fetch('/api/franchise/medicines/6a9fd2c718a5595edd52f530');
+                const data = await response.json();
+                document.getElementById('medicineData').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('medicineData').textContent = '❌ Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

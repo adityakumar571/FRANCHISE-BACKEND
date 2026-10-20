@@ -5,6 +5,28 @@ import cookieParser from "cookie-parser";
 import { initializeFirebase } from "./config/firebase.js";
 import compression from "compression";
 
+/* ── Global Error Handlers ── */
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error.message);
+  // Don't exit for MongoDB connection errors
+  if (!error.message?.includes('getaddrinfo') && !error.message?.includes('ENOTFOUND')) {
+    console.error('Stack:', error.stack);
+    process.exit(1);
+  }
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  const errorMsg = reason?.message || String(reason);
+  // MongoDB connection errors shouldn't crash the server
+  if (errorMsg?.includes('getaddrinfo') || errorMsg?.includes('ENOTFOUND') || errorMsg?.includes('ETIMEDOUT')) {
+    console.warn('⚠️  MongoDB connection issue detected - will retry on next request');
+  } else {
+    console.error('❌ Unhandled Promise Rejection:', errorMsg);
+  }
+});
+
 /* ── Main DB ── */
 import connectMainDB from "./config/mainDb.js";
 
@@ -82,6 +104,9 @@ Promise.all([
   console.error("❌ Startup initialization failed:", err.message);
   process.exit(1);
 });
+
+/* ── Serve Static Files (uploaded images) ── */
+app.use('/uploads', express.static('uploads'));
 
 /* ══════════════════════════════════════════
    PUBLIC ROUTES (no tenant context)

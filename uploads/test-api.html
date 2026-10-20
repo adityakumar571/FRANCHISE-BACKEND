@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test - Medicine Images</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .test { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; }
+        pre { background: #f9f9f9; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px; }
+        img { border: 2px solid #0891b2; border-radius: 8px; margin: 5px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        button { padding: 10px 20px; background: #0891b2; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0e7490; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Medicine API Test</h1>
+    
+    <div class="test">
+        <h2>Test 1: Fetch Medicines API</h2>
+        <button onclick="fetchMedicines()">Fetch Medicines</button>
+        <pre id="medicinesData"></pre>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: Display Medicine Images</h2>
+        <div id="imagesGallery" class="grid"></div>
+    </div>
+
+    <script>
+        async function fetchMedicines() {
+            try {
+                const url = '/api/franchise/medicines?limit=10';
+                document.getElementById('medicinesData').textContent = 'Loading...';
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                // Display JSON
+                document.getElementById('medicinesData').textContent = JSON.stringify(data, null, 2);
+                
+                // Display images
+                const gallery = document.getElementById('imagesGallery');
+                gallery.innerHTML = '';
+                
+                const medicines = data.data?.medicines || data.data || [];
+                
+                medicines.forEach(med => {
+                    const card = document.createElement('div');
+                    card.style.cssText = 'border: 1px solid #e5e7eb; padding: 10px; border-radius: 8px; text-align: center;';
+                    
+                    if (med.imageUrl) {
+                        const img = document.createElement('img');
+                        img.src = med.imageUrl;
+                        img.alt = med.name;
+                        img.width = 100;
+                        img.height = 100;
+                        img.style.cssText = 'object-fit: cover; border-radius: 8px;';
+                        img.onerror = function() {
+                            this.style.display = 'none';
+                            const fallback = document.createElement('div');
+                            fallback.textContent = '💊';
+                            fallback.style.cssText = 'font-size: 60px;';
+                            this.parentElement.appendChild(fallback);
+                        };
+                        card.appendChild(img);
+                    } else {
+                        const fallback = document.createElement('div');
+                        fallback.textContent = '💊';
+                        fallback.style.cssText = 'font-size: 60px; padding: 20px;';
+                        card.appendChild(fallback);
+                    }
+                    
+                    const name = document.createElement('div');
+                    name.textContent = med.name;
+                    name.style.cssText = 'font-size: 12px; font-weight: bold; margin-top: 8px;';
+                    card.appendChild(name);
+                    
+                    const imageStatus = document.createElement('div');
+                    imageStatus.textContent = med.imageUrl ? `✅ ${med.imageUrl}` : '❌ No image';
+                    imageStatus.style.cssText = 'font-size: 10px; color: ' + (med.imageUrl ? '#16a34a' : '#dc2626') + '; margin-top: 4px; word-break: break-all;';
+                    card.appendChild(imageStatus);
+                    
+                    gallery.appendChild(card);
+                });
+                
+            } catch (error) {
+                document.getElementById('medicinesData').textContent = '❌ Error: ' + error.message;
+            }
+        }
+        
+        // Auto-fetch on load
+        window.onload = fetchMedicines;
+    </script>
+</body>
+</html>

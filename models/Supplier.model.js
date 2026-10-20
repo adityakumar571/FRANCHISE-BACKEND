@@ -79,6 +79,21 @@ const supplierSchema = new mongoose.Schema({
       trim: true,
     },
   },
+  // Delivery Settings
+  deliveryTime: {
+    type: String,
+    enum: ['Same Day', 'Next Day', '2-3 Days', '3-5 Days', '5-7 Days'],
+    default: 'Next Day',
+    trim: true,
+  },
+  deliveryAvailable: {
+    type: Boolean,
+    default: true,
+  },
+  minimumOrderValue: {
+    type: Number,
+    default: 0,
+  },
   businessType: {
     type: String,
     enum: ['Manufacturer', 'Distributor', 'Retailer', 'Wholesaler', 'Service Provider'],
@@ -128,7 +143,7 @@ const supplierSchema = new mongoose.Schema({
     category: {
       type: String,
       required: true,
-      enum: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Other'],
+      enum: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Powder', 'Suspension', 'Gel', 'Lotion', 'Spray', 'Inhaler', 'Other'],
     },
     strength: {
       type: String,

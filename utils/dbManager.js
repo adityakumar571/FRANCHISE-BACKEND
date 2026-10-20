@@ -23,8 +23,9 @@ export const getTenantDB = async (dbUri) => {
     // Create and cache the promise immediately so concurrent callers
     // all await the same connection attempt instead of creating duplicates.
     connectionPromises[dbUri] = (async () => {
+        let conn;
         try {
-            const conn = mongoose.createConnection(dbUri, {
+            conn = mongoose.createConnection(dbUri, {
                 family: 4,
                 serverSelectionTimeoutMS: 15000,
                 connectTimeoutMS: 15000,
@@ -33,14 +34,31 @@ export const getTenantDB = async (dbUri) => {
                 socketTimeoutMS: 45000,
             });
 
+            // Prevent unhandled promise rejections by attaching error handler immediately
+            conn.on("error", (err) => {
+                console.error(`❌ Tenant DB Connection Error: ${dbUri.split('@')[1]?.split('/')[0] || 'unknown'}`, err.message);
+                // Don't remove from cache here - let the connection retry logic handle it
+            });
+
+            // Prevent unhandled disconnection errors
+            conn.on("disconnected", () => {
+                console.warn(`⚠️  Tenant DB Disconnected: ${dbUri.split('@')[1]?.split('/')[0] || 'unknown'}`);
+            });
+
             await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error("Connection timeout"));
+                }, 20000); // 20 second timeout
+
                 conn.once("connected", () => {
-                    console.log(`✅ Tenant DB Connected: ${dbUri}`);
+                    clearTimeout(timeout);
+                    console.log(`✅ Tenant DB Connected: ${dbUri.split('@')[1]?.split('/')[1] || 'unknown'}`);
                     resolve();
                 });
 
                 conn.once("error", (err) => {
-                    console.error(`❌ DB Error: ${dbUri}`, err);
+                    clearTimeout(timeout);
+                    console.error(`❌ Tenant DB Initial Connection Error: ${dbUri.split('@')[1]?.split('/')[0] || 'unknown'}`, err.message);
                     // Remove from cache so next request retries the connection
                     delete connectionPromises[dbUri];
                     reject(err);
@@ -51,7 +69,17 @@ export const getTenantDB = async (dbUri) => {
         } catch (error) {
             // Remove from cache on failure so the next request retries
             delete connectionPromises[dbUri];
-            console.error("❌ getTenantDB Error:", error);
+            
+            // Close the connection if it was created
+            if (conn) {
+                try {
+                    await conn.close();
+                } catch (closeErr) {
+                    // Ignore close errors
+                }
+            }
+            
+            console.error("❌ getTenantDB Failed:", error.message);
             throw error;
         }
     })();

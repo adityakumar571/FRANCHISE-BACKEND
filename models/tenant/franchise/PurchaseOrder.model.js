@@ -16,9 +16,14 @@ const PurchaseOrderSchema = new mongoose.Schema({
   supplier:     { type: String, trim: true },
   items:        [POItemSchema],
   totalAmount:  { type: Number, default: 0 },
+  totalMRP:     { type: Number, default: 0 },       // For live rates orders
+  discountAmt:  { type: Number, default: 0 },       // For live rates orders
+  gstAmt:       { type: Number, default: 0 },       // For live rates orders
+  grandTotal:   { type: Number, default: 0 },       // For live rates orders
   expectedDate: { type: Date },
   notes:        { type: String, trim: true },
-  status:       { type: String, enum: ['draft', 'pending', 'accepted', 'dispatched', 'completed', 'cancelled'], default: 'pending' },
+  status:       { type: String, enum: ['draft', 'pending', 'accepted', 'dispatched', 'completed', 'cancelled', 'Pending', 'Confirmed', 'Packed', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled'], default: 'pending' },
+  source:       { type: String, enum: ['purchase_module', 'live_rates_module'], default: 'purchase_module', index: true },
   createdBy:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

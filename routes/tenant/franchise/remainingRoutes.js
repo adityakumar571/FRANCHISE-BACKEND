@@ -1,5 +1,8 @@
 /* All remaining franchise routes in one file for simplicity */
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import {
   getMedicines, createMedicine, updateMedicine, getMedicineById, toggleMedicineStatus,
   getMedicineBatches, getAlternatives, getMedicineBarcode, getGenericMapping,
@@ -7,6 +10,10 @@ import {
   // New medicine routes
   getMedicineMeta, getMedicineGenericMapping, deleteGenericMapping, deleteAlternative,
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
+  // NEW: Rack Location & Batch Management
+  getMedicinesByRack, searchByLocation, updateMedicineLocation,
+  addBatchToMedicine, getExpiringSoon, getExpiredMedicines,
+  generateBarcode, getRackSummary,
 } from '../../../controllers/tenant/franchise/medicineController.js';
 
 // ── Supplier Masters (shared Category / Unit / Company) ──
@@ -47,6 +54,36 @@ import {
 
 const router = express.Router();
 
+// ── Multer Configuration for Image Uploads ───────────────────────────────────
+const uploadDir = 'uploads/medicines';
+if (!fs.existsSync(uploadDir)){
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'medicine-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed'), false);
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+  fileFilter: fileFilter
+});
+
 // ── Medicines ─────────────────────────────────────────────────────────────────
 router.get('/medicines/meta',               getMedicineMeta);         // ← NEW: dropdown data
 
@@ -57,11 +94,21 @@ router.post('/medicines/masters',           createMaster);
 router.put('/medicines/masters/:id',        updateMaster);
 router.delete('/medicines/masters/:id',     deleteMaster);
 
+// ── NEW: Rack & Batch Management (placed before :id routes to avoid conflicts) ──
+router.get('/medicines/search-by-location', searchByLocation);        // ← NEW: search by position
+router.get('/medicines/expiring-soon',      getExpiringSoon);         // ← NEW: expiring batches
+router.get('/medicines/expired',            getExpiredMedicines);     // ← NEW: expired batches
+router.post('/medicines/barcode/generate',  generateBarcode);         // ← NEW: generate barcode
+router.get('/medicines/rack-summary',       getRackSummary);          // ← NEW: rack summary
+router.get('/medicines/racks/:rackId',      getMedicinesByRack);      // ← NEW: medicines in rack
+
 router.get('/medicines',                    getMedicines);
 router.post('/medicines',                   createMedicine);
 router.put('/medicines/:id',                updateMedicine);
 router.get('/medicines/:id',                getMedicineById);
 router.patch('/medicines/:id/status',       toggleMedicineStatus);
+router.put('/medicines/:id/location',       updateMedicineLocation);  // ← NEW: update location
+router.post('/medicines/:id/batch',         addBatchToMedicine);      // ← NEW: add batch
 router.get('/medicines/:id/batches',        getMedicineBatches);
 router.get('/medicines/:id/alternatives',   getAlternatives);
 router.delete('/medicines/:id/alternatives/:altId', deleteAlternative);  // ← NEW
@@ -69,7 +116,7 @@ router.get('/medicines/:id/barcode',        getMedicineBarcode);
 router.get('/medicines/:id/generic',        getMedicineGenericMapping);  // ← NEW
 router.delete('/medicines/:id/generic/:brandId', deleteGenericMapping);  // ← NEW
 router.get('/medicines/:id/images',         getMedicineImages);           // ← NEW
-router.post('/medicines/:id/images',        uploadMedicineImage);         // ← NEW
+router.post('/medicines/:id/images',        upload.single('image'), uploadMedicineImage);         // ← NEW with multer
 router.delete('/medicines/:id/images/:imageId', deleteMedicineImage);    // ← NEW
 router.post('/medicines/:id/images/:imageId/set-primary', setPrimaryMedicineImage); // ← NEW
 router.get('/generic-mapping',              getGenericMapping);

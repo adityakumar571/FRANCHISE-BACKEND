@@ -169,7 +169,7 @@ class FranchiseSupplierController {
           }
         },
         
-        // Project required fields with calculated delivery estimate
+        // Project required fields with supplier delivery time
         {
           $project: {
             supplierInfo: {
@@ -180,7 +180,8 @@ class FranchiseSupplierController {
               phone: '$phone',
               rating: { $ifNull: ['$rating', 0] },
               city: '$address.city',
-              state: '$address.state'
+              state: '$address.state',
+              deliveryTime: { $ifNull: ['$deliveryTime', 'Next Day'] }
             },
             medicine: {
               _id: '$medicines._id',
@@ -213,13 +214,7 @@ class FranchiseSupplierController {
               stock: '$medicines.stock',
               scheme: { $ifNull: ['$medicines.scheme', 'No Scheme'] },
               expiryDate: '$medicines.expiryDate',
-              deliveryEstimate: {
-                $cond: {
-                  if: { $gte: ['$medicines.stock', 100] },
-                  then: 'Same Day',
-                  else: 'Next Day'
-                }
-              }
+              deliveryEstimate: { $ifNull: ['$deliveryTime', 'Next Day'] }
             }
           }
         },
