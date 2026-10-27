@@ -13,17 +13,18 @@ const seedRacks = async (db) => {
   const Rack = getRackModel(db);
   if (await Rack.countDocuments() > 0) return;
   await Rack.insertMany([
-    { code: 'A01', area: 'Main Store',  shelf: 'Shelf 1', description: 'Analgesics & Antipyretics', capacity: 20 },
-    { code: 'A02', area: 'Main Store',  shelf: 'Shelf 2', description: 'Antibiotics',                capacity: 15 },
-    { code: 'B01', area: 'Main Store',  shelf: 'Shelf 3', description: 'Cardiac & BP',              capacity: 12 },
-    { code: 'B02', area: 'Main Store',  shelf: 'Shelf 3', description: 'Antidiabetics',             capacity: 15 },
-    { code: 'C01', area: 'Back Store',  shelf: 'Shelf 1', description: 'Cold & Cough',              capacity: 20 },
-    { code: 'D01', area: 'Back Store',  shelf: 'Shelf 2', description: 'Vitamins & Supplements',    capacity: 25 },
-    { code: 'REF', area: 'Refrigerator',shelf: 'Fridge',  description: 'Cold Storage - Insulin/Vaccines', capacity: 8 },
+    { code: 'A01', name: 'RACK-A', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 1', section: 'Pain Relief', description: 'Analgesics & Antipyretics', capacity: 20 },
+    { code: 'A02', name: 'RACK-B', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 2', section: 'Antibiotics', description: 'Antibiotics',                capacity: 15 },
+    { code: 'B01', name: 'RACK-C', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 3', section: 'Cardiac', description: 'Cardiac & BP',              capacity: 12 },
+    { code: 'B02', name: 'RACK-D', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 3', section: 'Diabetes', description: 'Antidiabetics',             capacity: 15 },
+    { code: 'C01', name: 'RACK-E', area: 'Back Store',  warehouse: 'Back Store', shelf: 'Shelf 1', section: 'Cold & Cough', description: 'Cold & Cough',              capacity: 20 },
+    { code: 'D01', name: 'RACK-F', area: 'Back Store',  warehouse: 'Back Store', shelf: 'Shelf 2', section: 'Vitamins', description: 'Vitamins & Supplements',    capacity: 25 },
+    { code: 'REF', name: 'FRIDGE',  area: 'Refrigerator', warehouse: 'Cold Storage', shelf: 'Fridge',  section: 'Cold Storage', description: 'Cold Storage - Insulin/Vaccines', capacity: 8 },
   ]);
 };
 
 const seedAdjustments = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy stock adjustments
   const SA = getStockAdjustmentModel(db);
   if (await SA.countDocuments() > 0) return;
   const Medicine = getMedicineModel(db);
@@ -82,13 +83,17 @@ export const getInventoryDashboard = asyncHandler(async (req, res) => {
   const lowStockResult = allMeds
     .filter(m => m.currentStock > 0 && m.currentStock <= m.reorderLevel)
     .slice(0, 5)
-    .map(m => ({ name: m.name, stock: m.currentStock, rackLabel: m.rackLabel }));
+    .map(m => ({ 
+      name: m.name, 
+      stock: m.currentStock, 
+      rackLabel: m.rackLocation?.position || m.rackLocation?.rackId || '—'
+    }));
 
   const topItemsResult = topValueMeds.map((m, i) => ({
     rank: i + 1,
     name: m.name,
     value: `₹${(m.currentStock * m.purchasePrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-    loc: m.rackLabel || '—',
+    loc: m.rackLocation?.position || m.rackLocation?.rackId || '—',
   }));
 
   const catTotal = categoryAgg.reduce((s, c) => s + c.totalValue, 0) || 1;
@@ -159,7 +164,7 @@ export const getStockList = asyncHandler(async (req, res) => {
       mrp:            `₹${Number(m.mrp).toFixed(2)}`,
       purchasePrice:  `₹${Number(m.purchasePrice).toFixed(2)}`,
       stockValue:     `₹${(m.currentStock * m.purchasePrice).toLocaleString('en-IN')}`,
-      location:       m.rackLabel || '—',
+      location:       m.rackLocation?.position || m.rackLocation?.rackId || '—',
       status:         itemStatus,
     };
   }));
@@ -187,7 +192,7 @@ export const getNearExpiry = asyncHandler(async (req, res) => {
   const skip = (Number(page) - 1) * Number(limit);
 
   const [batches, total] = await Promise.all([
-    MedicineBatch.find(filter).populate('medicineId', 'name mrp rackLabel').sort({ expiryDate: 1 }).skip(skip).limit(Number(limit)).lean(),
+    MedicineBatch.find(filter).populate('medicineId', 'name mrp rackLocation').sort({ expiryDate: 1 }).skip(skip).limit(Number(limit)).lean(),
     MedicineBatch.countDocuments(filter),
   ]);
 
@@ -493,7 +498,7 @@ export const getBatchExpiry = asyncHandler(async (req, res) => {
       daysLeft,
       qty:      b.qty,
       mrp:      b.mrp,
-      rackLabel: b.rackLabel || '—',
+      rackLabel: b.medicineId?.rackLocation?.position || b.medicineId?.rackLocation?.rackId || '—',
       status:   daysLeft < 0 ? 'Expired' : daysLeft <= 30 ? 'Critical' : daysLeft <= 90 ? 'Warning' : 'Safe',
     };
   });
@@ -530,7 +535,10 @@ export const getRacks = asyncHandler(async (req, res) => {
   const racks = await Rack.find(filter).lean();
 
   const result = await Promise.all(racks.map(async (rack) => {
-    const items = await Medicine.countDocuments({ rackLabel: rack.code, isActive: true });
+    const items = await Medicine.countDocuments({ 
+      'rackLocation.rackId': rack.code, 
+      isActive: true 
+    });
     const pct   = rack.capacity > 0 ? Math.round((items / rack.capacity) * 100) : 0;
     return { ...rack, items, pct };
   }));
@@ -539,12 +547,104 @@ export const getRacks = asyncHandler(async (req, res) => {
 });
 
 export const createRack = asyncHandler(async (req, res) => {
-  const { code, area, shelf, description, capacity } = req.body;
-  if (!code) return res.status(400).json(new apiResponse(400, null, 'Rack code required'));
+  console.log('🎯 createRack called');
+  console.log('📥 Request body:', req.body);
+  
+  const { code, name, area, warehouse, shelf, section, description, capacity, status } = req.body;
+  
+  if (!code && !name) {
+    console.log('❌ Validation failed: No code or name');
+    return res.status(400).json(new apiResponse(400, null, 'Rack code or name is required'));
+  }
 
   const Rack = getRackModel(req.db);
-  const rack = await Rack.create({ code: code.toUpperCase(), area, shelf, description, capacity: Number(capacity) || 20 });
-  return res.status(201).json(new apiResponse(201, rack, 'Rack created'));
+  
+  // Generate code from name if not provided
+  const rackCode = code || name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+  console.log('🔤 Generated rack code:', rackCode);
+  
+  // Check if code already exists
+  const existing = await Rack.findOne({ code: rackCode });
+  if (existing) {
+    console.log('❌ Rack code already exists:', rackCode);
+    return res.status(400).json(new apiResponse(400, null, 'Rack code already exists'));
+  }
+  
+  const rackData = { 
+    code: rackCode,
+    name: name || code,
+    area: area || 'Main Store',
+    warehouse: warehouse || 'Main Pharmacy',
+    shelf,
+    section,
+    description,
+    capacity: Number(capacity) || 20,
+    currentItems: 0,
+    status: status || 'Active',
+    isActive: true
+  };
+  
+  console.log('📦 Creating rack with data:', rackData);
+  const rack = await Rack.create(rackData);
+  console.log('✅ Rack created successfully:', rack._id);
+  
+  return res.status(201).json(new apiResponse(201, rack, 'Rack created successfully'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// PUT /api/franchise/inventory/rack/:id — Update rack
+// ────────────────────────────────────────────────────────────────────────────
+export const updateRack = asyncHandler(async (req, res) => {
+  const { name, area, warehouse, shelf, section, description, capacity, status } = req.body;
+  const Rack = getRackModel(req.db);
+  
+  const rack = await Rack.findById(req.params.id);
+  if (!rack) {
+    return res.status(404).json(new apiResponse(404, null, 'Rack not found'));
+  }
+  
+  // Update fields
+  if (name) rack.name = name;
+  if (area) rack.area = area;
+  if (warehouse) rack.warehouse = warehouse;
+  if (shelf) rack.shelf = shelf;
+  if (section) rack.section = section;
+  if (description) rack.description = description;
+  if (capacity) rack.capacity = Number(capacity);
+  if (status) rack.status = status;
+  
+  await rack.save();
+  return res.status(200).json(new apiResponse(200, rack, 'Rack updated successfully'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// DELETE /api/franchise/inventory/rack/:id — Delete rack (soft delete)
+// ────────────────────────────────────────────────────────────────────────────
+export const deleteRack = asyncHandler(async (req, res) => {
+  const Rack = getRackModel(req.db);
+  const Medicine = getMedicineModel(req.db);
+  
+  const rack = await Rack.findById(req.params.id);
+  if (!rack) {
+    return res.status(404).json(new apiResponse(404, null, 'Rack not found'));
+  }
+  
+  // Check if any medicines are assigned to this rack
+  const medicinesCount = await Medicine.countDocuments({ 
+    'rackLocation.rackId': rack.code,
+    isActive: true 
+  });
+  
+  if (medicinesCount > 0) {
+    return res.status(400).json(new apiResponse(400, null, `Cannot delete rack. ${medicinesCount} medicines are assigned to this rack.`));
+  }
+  
+  // Soft delete
+  rack.isActive = false;
+  rack.status = 'Inactive';
+  await rack.save();
+  
+  return res.status(200).json(new apiResponse(200, rack, 'Rack deleted successfully'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -580,36 +680,146 @@ export const getStockAdjustments = asyncHandler(async (req, res) => {
 });
 
 export const createStockAdjustment = asyncHandler(async (req, res) => {
-  const { medicine, batch, type, qty, reason } = req.body;
-  if (!medicine || !qty || !reason) return res.status(400).json(new apiResponse(400, null, 'Medicine, qty and reason required'));
+  // Support both old format (medicine, batch, type, qty) and new format (medicineId, batchDetails, adjustmentType)
+  const {
+    medicine, medicineName, medicineId,
+    batch, batchDetails,
+    type, adjustmentType,
+    qty,
+    reason,
+    supplier, invoiceNo, invoiceDate, totalAmount, notes
+  } = req.body;
 
-  const SA       = getStockAdjustmentModel(req.db);
+  // Extract values from either format
+  const medName = medicineName || medicine;
+  const medId = medicineId;
+  const batchNo = batchDetails?.batchNo || batch;
+  const quantity = batchDetails?.quantity || qty;
+  const adjType = adjustmentType || type || 'stock_in';
+
+  if (!medName || !quantity || !reason) {
+    return res.status(400).json(new apiResponse(400, null, 'Medicine, quantity and reason required'));
+  }
+
+  const SA = getStockAdjustmentModel(req.db);
   const Medicine = getMedicineModel(req.db);
+  const MedicineBatch = getMedicineBatchModel(req.db);
 
-  const count  = await SA.countDocuments();
-  const adjNo  = `ADJ-${String(count + 302).padStart(3, '0')}`;
+  const count = await SA.countDocuments();
+  const adjNo = `ADJ-${String(count + 302).padStart(3, '0')}`;
 
-  const adj = await SA.create({ adjNo, medicine, batch, type, qty: Number(qty), reason, status: 'pending', by: 'Admin' });
+  // Find medicine to get ID if not provided
+  let med = null;
+  if (medId) {
+    med = await Medicine.findById(medId);
+  } else {
+    med = await Medicine.findOne({ name: new RegExp(medName, 'i'), isActive: true });
+  }
 
-  return res.status(201).json(new apiResponse(201, { _id: adj._id, adjNo: adj.adjNo }, 'Adjustment submitted for approval'));
+  if (!med) {
+    return res.status(404).json(new apiResponse(404, null, `Medicine '${medName}' not found`));
+  }
+
+  // Create stock adjustment record
+  const adj = await SA.create({
+    adjNo,
+    medicine: med.name,
+    medicineId: med._id,
+    batch: batchNo,
+    batchDetails: batchDetails || null,
+    type: adjType,
+    qty: Number(quantity),
+    reason,
+    status: 'pending',
+    by: 'Admin',
+    supplier,
+    invoiceNo,
+    invoiceDate,
+    totalAmount,
+    notes
+  });
+
+  return res.status(201).json(new apiResponse(201, {
+    _id: adj._id,
+    adjNo: adj.adjNo,
+    status: 'pending',
+    message: 'Stock adjustment submitted for approval'
+  }, 'Adjustment submitted for approval'));
 });
 
 export const approveStockAdjustment = asyncHandler(async (req, res) => {
-  const SA       = getStockAdjustmentModel(req.db);
+  const SA = getStockAdjustmentModel(req.db);
   const Medicine = getMedicineModel(req.db);
+  const MedicineBatch = getMedicineBatchModel(req.db);
 
-  const adj = await SA.findByIdAndUpdate(req.params.id, { status: 'completed', approvedBy: 'Admin' }, { new: true });
+  const adj = await SA.findById(req.params.id);
   if (!adj) return res.status(404).json(new apiResponse(404, null, 'Adjustment not found'));
 
-  // Apply the stock change
-  if (adj.medicine) {
-    await Medicine.findOneAndUpdate(
-      { name: new RegExp(adj.medicine, 'i'), isActive: true },
-      { $inc: { currentStock: Number(adj.qty) } }
-    );
+  if (adj.status === 'completed') {
+    return res.status(400).json(new apiResponse(400, null, 'Adjustment already approved'));
   }
 
-  return res.status(200).json(new apiResponse(200, { _id: adj._id, status: adj.status }, 'Adjustment approved and stock updated'));
+  // Update adjustment status
+  adj.status = 'completed';
+  adj.approvedBy = 'Admin';
+  adj.approvedAt = new Date();
+  await adj.save();
+
+  // Find medicine
+  let med = null;
+  if (adj.medicineId) {
+    med = await Medicine.findById(adj.medicineId);
+  } else if (adj.medicine) {
+    med = await Medicine.findOne({ name: new RegExp(adj.medicine, 'i'), isActive: true });
+  }
+
+  if (!med) {
+    return res.status(404).json(new apiResponse(404, null, `Medicine '${adj.medicine}' not found`));
+  }
+
+  // Calculate stock change based on adjustment type
+  let stockChange = Number(adj.qty);
+  const adjType = (adj.type || '').toLowerCase();
+  
+  // For stock_out, expired, damaged, etc., quantity should be negative
+  if (adjType.includes('out') || adjType === 'expired' || adjType === 'damaged' || adjType === 'loss') {
+    stockChange = -Math.abs(stockChange);
+  } else if (adjType.includes('in') || adjType === 'stock_in' || adjType === 'correction') {
+    stockChange = Math.abs(stockChange);
+  }
+
+  // Update medicine stock
+  med.currentStock = (med.currentStock || 0) + stockChange;
+  await med.save();
+
+  // Create batch entry if batch details provided and it's stock addition
+  if (adj.batchDetails && stockChange > 0) {
+    const batch = adj.batchDetails;
+    await MedicineBatch.create({
+      medicineId: med._id,
+      batchNo: batch.batchNo || adj.batch,
+      expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : new Date(Date.now() + 365 * 86400000),
+      qty: Math.abs(stockChange),
+      purchasePrice: batch.purchasePrice || batch.ptr || 0,
+      mrp: batch.mrp || 0,
+      ptr: batch.ptr || 0,
+      gst: batch.gst || 0,
+      discount: batch.discount || 0,
+      supplierId: adj.supplier || null,
+      adjustmentId: adj._id,
+      rackLabel: med.rackLocation?.position || med.rackLocation?.rackId || '',
+      rackLocation: med.rackLocation,
+      isActive: true,
+    });
+  }
+
+  return res.status(200).json(new apiResponse(200, {
+    _id: adj._id,
+    adjNo: adj.adjNo,
+    status: adj.status,
+    stockChange,
+    newStock: med.currentStock
+  }, `Adjustment approved and stock updated. New stock: ${med.currentStock}`));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -620,9 +830,9 @@ export const getInventoryAudits = asyncHandler(async (req, res) => {
   const Audit = getInventoryAuditModel(req.db);
   const skip  = (Number(page) - 1) * Number(limit);
 
-  // Seed dummy audit
+  // Seed dummy audit - DISABLED FOR PRODUCTION
   const count = await Audit.countDocuments();
-  if (count === 0) {
+  if (count === 0 && false) { // Condition disabled - no dummy audits
     await Audit.insertMany([
       { auditNo: 'AUD-001', startedAt: new Date(Date.now() - 7 * 86400000), completedAt: new Date(Date.now() - 6 * 86400000), items: [], status: 'completed', notes: 'Monthly audit', by: 'Admin' },
       { auditNo: 'AUD-002', startedAt: new Date(Date.now() - 1 * 86400000), items: [], status: 'in_progress', notes: 'Weekly audit', by: 'Pharmacist' },

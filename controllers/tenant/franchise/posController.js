@@ -12,6 +12,8 @@ import { getDayClosingModel } from '../../../models/tenant/franchise/DayClosing.
 // Seed Medicine + MedicineBatch data (50+ medicines with batches)
 // ────────────────────────────────────────────────────────────────────────────
 const seedMedicineData = async (db) => {
+  return; // ❌ PRODUCTION: Seeding disabled - franchises add their own inventory
+  
   const Medicine = getMedicineModel(db);
   const MedicineBatch = getMedicineBatchModel(db);
   const count = await Medicine.countDocuments();
@@ -96,6 +98,8 @@ const seedMedicineData = async (db) => {
 // Seed Customer data (20+ customers)
 // ────────────────────────────────────────────────────────────────────────────
 const seedCustomerData = async (db) => {
+  return; // ❌ PRODUCTION: Seeding disabled - franchises add their own customers
+  
   const Customer = getCustomerModel(db);
   const count = await Customer.countDocuments();
   if (count > 0) return;
@@ -132,6 +136,8 @@ const seedCustomerData = async (db) => {
 // Seed SaleInvoice data (30+ invoices for Sales reports)
 // ────────────────────────────────────────────────────────────────────────────
 const seedSaleInvoiceData = async (db) => {
+  return; // ❌ PRODUCTION: Seeding disabled - franchises generate real sales
+  
   const SaleInvoice = getSaleInvoiceModel(db);
   const count = await SaleInvoice.countDocuments();
   if (count > 0) return;
@@ -412,9 +418,9 @@ export const addCustomer = asyncHandler(async (req, res) => {
 export const getHoldBills = asyncHandler(async (req, res) => {
   const HoldBill = getHoldBillModel(req.db);
 
-  // Seed dummy hold bills if empty
+  // Seed dummy hold bills - DISABLED FOR PRODUCTION
   const count = await HoldBill.countDocuments({ isActive: true });
-  if (count === 0) {
+  if (count === 0 && false) { // Condition disabled - no dummy hold bills
     await HoldBill.insertMany([
       { holdId: 'HB001', customerName: 'Rahul Sharma', items: [{ medicineName: 'Crocin 650 Tablet', qty: 2, mrp: 16, amount: 32 }, { medicineName: 'Pantoprazole 40mg', qty: 1, mrp: 35, amount: 35 }, { medicineName: 'Vitamin D3 60000 IU', qty: 1, mrp: 72, amount: 72 }], subtotal: 139, totalAmt: 139, note: 'Fever Medicine Bill',    isActive: true },
       { holdId: 'HB002', customerName: 'Priya Verma',  items: [{ medicineName: 'Azithral 500 Tablet', qty: 1, mrp: 85, amount: 85 }, { medicineName: 'Calpol 650 Tablet', qty: 2, mrp: 30, amount: 60 }, { medicineName: 'Omeprazole 20mg', qty: 1, mrp: 35, amount: 35 }, { medicineName: 'Augmentin 625', qty: 1, mrp: 225, amount: 225 }, { medicineName: 'Zincovit Tablet', qty: 2, mrp: 145, amount: 290 }], subtotal: 695, totalAmt: 695, note: "Nid's Medicine Bill",   isActive: true },

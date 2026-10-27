@@ -41,13 +41,7 @@ export const createUser = asyncHandler(async (req, res) => {
     }
 
     // ===============================
-    // ⚠️ (IMPORTANT) HASH PASSWORD
-    // ===============================
-    // 👉 strongly recommended
-    // const hashedPassword = await bcrypt.hash(plainPassword, 10);
-
-    // ===============================
-    // ✅ CREATE USER
+    // ✅ CREATE USER (password will be auto-hashed by pre-save hook)
     // ===============================
     const user = await User.create({
         phone,
@@ -55,7 +49,7 @@ export const createUser = asyncHandler(async (req, res) => {
         name,
         gender,
         role: role || "Admin",
-        password: plainPassword, // 👉 replace with hashedPassword in production
+        password: plainPassword, // Will be hashed by model pre-save hook
     });
 
     // ===============================
@@ -92,9 +86,9 @@ export const loginUser = asyncHandler(async (req, res) => {
     // 🔍 FIND USER — by email or userId
     // ===============================
     const query = email ? { email: email.toLowerCase().trim() } : { userId }
-    console.log("🔍 LOGIN ATTEMPT —", JSON.stringify(query), "| password:", JSON.stringify(password));
+    console.log("🔍 LOGIN ATTEMPT —", JSON.stringify(query));
     const user = await User.findOne(query).populate("tenantId", "schoolName logo subdomain");
-    console.log("🔍 USER FOUND:", user ? `YES — stored password: ${JSON.stringify(user.password)}` : "NO");
+    console.log("🔍 USER FOUND:", user ? "YES" : "NO");
 
     if (!user) {
         return res
@@ -111,13 +105,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     // ===============================
     // 🔐 PASSWORD CHECK
     // ===============================
-    let isMatch = false;
-
-    if (user.comparePassword) {
-        isMatch = await user.comparePassword(password);
-    } else {
-        isMatch = user.password === password;
-    }
+    const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
         return res

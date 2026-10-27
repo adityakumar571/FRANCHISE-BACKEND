@@ -5,7 +5,7 @@ const BatchSchema = new mongoose.Schema({
   mfgDate:        { type: Date },
   expiryDate:     { type: Date, required: true },
   quantity:       { type: Number, required: true, default: 0 },
-  availableQty:   { type: Number, default: 0 }, // For FIFO tracking
+  availableQty:   { type: Number }, // For FIFO tracking - will default to quantity if not set
   mrp:            { type: Number, required: true },
   purchasePrice:  { type: Number, required: true },
   supplierId:     { type: String }, // Supplier reference
@@ -20,6 +20,14 @@ const BatchSchema = new mongoose.Schema({
     position:     { type: String },              // Auto-generated: 'A-3-B-5'
   },
 }, { timestamps: true });
+
+// Pre-save hook for batch to set availableQty if not provided
+BatchSchema.pre('save', function(next) {
+  if (this.availableQty === undefined || this.availableQty === null) {
+    this.availableQty = this.quantity;
+  }
+  next();
+});
 
 const MedicineSchema = new mongoose.Schema({
   // Basic Information
@@ -113,7 +121,9 @@ MedicineSchema.index({ 'batches.expiryDate': 1 }); // For expiry alerts
 MedicineSchema.pre('save', function(next) {
   if (this.isBatchTracked && this.batches && this.batches.length > 0) {
     this.currentStock = this.batches.reduce((sum, batch) => {
-      return sum + (batch.isActive ? batch.availableQty : 0);
+      // Use availableQty if exists, otherwise use quantity
+      const qty = batch.availableQty !== undefined ? batch.availableQty : batch.quantity;
+      return sum + (batch.isActive !== false ? qty : 0);
     }, 0);
   }
   

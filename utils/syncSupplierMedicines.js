@@ -77,6 +77,55 @@ export async function syncMedicineToAllFranchises(supplier, medicine) {
           { upsert: true, new: true }
         )
         
+        // ✅ NEW: Also sync to Medicine collection with initial stock = 0
+        // This makes medicine available in franchise but they need to add stock via purchase/adjustment
+        const { getMedicineModel } = await import('../models/tenant/franchise/Medicine.model.js')
+        const Medicine = getMedicineModel(tenantConn)
+        
+        // Check if medicine already exists
+        const existingMedicine = await Medicine.findOne({
+          name: medicine.name,
+          strength: medicine.strength || ''
+        })
+        
+        if (!existingMedicine) {
+          // Create new medicine entry with 0 stock
+          await Medicine.create({
+            name: medicine.name,
+            genericName: medicine.genericName || '',
+            salt: medicine.salt || medicine.genericName || '',
+            strength: medicine.strength || '',
+            formulation: medicine.formulation || 'Tablet',
+            category: medicine.category || 'General',
+            company: medicine.manufacturer || supplier.companyName,
+            unit: 'Strip',
+            packSize: medicine.packSize || '',
+            mrp: medicine.mrp,
+            purchasePrice: medicine.supplierPrice,
+            sellingPrice: medicine.mrp,
+            gstPercent: gstPercent,
+            hsnCode: medicine.hsnCode || '3004',
+            currentStock: 0, // Initial stock is 0 - franchise will add via purchase
+            reorderLevel: 10,
+            isBatchTracked: true,
+            batches: [], // Empty batches initially
+            isActive: true,
+            rackLocation: {}, // Will be assigned later by franchise
+            description: medicine.description || '',
+          })
+          console.log(`[SYNC] ✓ Created medicine in ${franchise.subdomain}`)
+        } else {
+          // Update existing medicine details (NOT stock - stock managed by franchise)
+          await Medicine.findByIdAndUpdate(existingMedicine._id, {
+            mrp: medicine.mrp,
+            purchasePrice: medicine.supplierPrice,
+            gstPercent: gstPercent,
+            company: medicine.manufacturer || supplier.companyName,
+            // Note: We DON'T update currentStock - that's managed by franchise
+          })
+          console.log(`[SYNC] ✓ Updated medicine in ${franchise.subdomain}`)
+        }
+        
         await tenantConn.close()
         console.log(`[SYNC] ✓ Synced to ${franchise.subdomain}`)
         return { franchise: franchise.subdomain, success: true }

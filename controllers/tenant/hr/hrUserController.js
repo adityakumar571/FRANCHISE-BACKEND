@@ -149,7 +149,9 @@ export const hrLogin = asyncHandler(async (req, res) => {
   if (!user.isActive)
     return apiError(res, 403, false, "Your account is deactivated. Contact administrator");
 
-  if (user.password !== password)
+  // 🔐 Use bcrypt password comparison
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch)
     return apiError(res, 401, false, "Invalid password");
 
   const token = user.generateAuthToken();

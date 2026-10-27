@@ -10,7 +10,11 @@ export const tenantLogin = asyncHandler(async (req, res) => {
   const User = getUserModel(req.db);
   const user = await User.findOne({ userId });
   if (!user) return res.status(404).json(new apiResponse(404, null, "User not found"));
-  if (user.password !== password) return res.status(401).json(new apiResponse(401, null, "Invalid credentials"));
+  
+  // 🔐 Use bcrypt password comparison
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) return res.status(401).json(new apiResponse(401, null, "Invalid credentials"));
+  
   const token = user.generateAuthToken();
   user.lastLogin = new Date();
   await user.save();
@@ -47,7 +51,9 @@ export const loginWithPassword = asyncHandler(async (req, res) => {
         .json(new apiResponse(400, null, "Password is not set for this user"));
     }
 
-    if (existingUser.password !== password) {
+    // 🔐 Use bcrypt password comparison
+    const isMatch = await existingUser.comparePassword(password);
+    if (!isMatch) {
       return res
         .status(400)
         .json(new apiResponse(400, null, "Invalid password"));
@@ -105,8 +111,12 @@ export const changePassword = asyncHandler(async (req, res) => {
   const User = getUserModel(req.db);
   const user = await User.findById(userId);
   if (!user) return res.status(404).json(new apiResponse(404, null, "User not found"));
-  if (user.password !== oldPassword) return res.status(400).json(new apiResponse(400, null, "Old password incorrect"));
-  user.password = newPassword;
+  
+  // 🔐 Use bcrypt password comparison
+  const isMatch = await user.comparePassword(oldPassword);
+  if (!isMatch) return res.status(400).json(new apiResponse(400, null, "Old password incorrect"));
+  
+  user.password = newPassword; // Will be hashed by pre-save hook
   await user.save();
   return res.status(200).json(new apiResponse(200, null, "Password changed successfully"));
 });

@@ -12,6 +12,8 @@ import {
   getBatchExpiry,
   getRacks,
   createRack,
+  updateRack,
+  deleteRack,
   getStockAdjustments,
   createStockAdjustment,
   approveStockAdjustment,
@@ -35,6 +37,8 @@ router.get('/ledger',                      getStockLedger);
 router.get('/batch-expiry',               getBatchExpiry);
 router.get('/rack',                        getRacks);
 router.post('/rack',                       createRack);
+router.put('/rack/:id',                    updateRack);
+router.delete('/rack/:id',                 deleteRack);
 router.get('/adjustments',                 getStockAdjustments);
 router.post('/adjustments',                createStockAdjustment);
 router.put('/adjustments/:id/approve',     approveStockAdjustment);

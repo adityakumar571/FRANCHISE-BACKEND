@@ -14,6 +14,8 @@ import Supplier from '../../../models/Supplier.model.js'; // ← GLOBAL Supplier
 // Seed Supplier Data
 // ────────────────────────────────────────────────────────────────────────────
 const seedSupplierData = async (db) => {
+  return; // ❌ PRODUCTION: Seeding disabled - franchises add their own suppliers
+  
   const Supplier = getSupplierModel(db);
   const count = await Supplier.countDocuments();
   if (count > 0) return;
@@ -38,6 +40,8 @@ const seedSupplierData = async (db) => {
 // Seed dummy Purchase Orders and GRNs
 // ────────────────────────────────────────────────────────────────────────────
 const seedPurchaseData = async (db) => {
+  return; // ❌ PRODUCTION: Seeding disabled - franchises create real purchases
+  
   const PurchaseOrder = getPurchaseOrderModel(db);
   const GRN = getGRNModel(db);
   const PurchaseReturn = getPurchaseReturnModel(db);
@@ -471,7 +475,8 @@ export const createGRN = asyncHandler(async (req, res) => {
           mrp:           Number(item.mrp) || 0,
           supplierId,
           grnId:         grn._id,
-          rackLabel:     item.rack || item.rackLabel || '',
+          rackLabel:     item.rack || item.rackLabel || '', // Legacy field
+          rackLocation:  med.rackLocation || {}, // Sync from medicine
           isActive:      true,
         });
       }

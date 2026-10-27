@@ -387,7 +387,11 @@ export const franchiseLogin = asyncHandler(async (req, res) => {
     const User = getUserModel(req.db);
     const user = await User.findOne({ userId });
     if (!user) return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
-    if (user.password !== password) return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    
+    // 🔐 Use bcrypt password comparison
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) return res.status(401).json(new apiResponse(401, null, "Invalid credentials."));
+    
     if (!user.isActive) return res.status(403).json(new apiResponse(403, null, "Your account is inactive."));
 
     const token = user.generateAuthToken();

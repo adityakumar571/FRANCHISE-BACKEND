@@ -3,6 +3,8 @@ import { apiResponse } from '../utils/apiResponse.js'
 import { apiError } from '../utils/apiError.js'
 
 /* ─── seed defaults if collection is empty for a given type ─── */
+// These are ESSENTIAL reference data needed for dropdowns
+// NOT dummy test data - keeps minimal defaults for production use
 const DEFAULTS = {
   category: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Powder', 'Gel', 'Other'],
   unit:     ['Strip', 'Box', 'Bottle', 'Pack', 'Piece', 'Vial', 'Tube', 'Sachet'],

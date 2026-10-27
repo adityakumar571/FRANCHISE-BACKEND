@@ -3,6 +3,10 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+// ── Rack Management Routes ────────────────────────────────────────────────────
+import { createRack as createRackInv, updateRack as updateRackInv, deleteRack as deleteRackInv } from '../../../controllers/tenant/franchise/inventoryController.js';
+
+// Existing medicine controller imports
 import {
   getMedicines, createMedicine, updateMedicine, getMedicineById, toggleMedicineStatus,
   getMedicineBatches, getAlternatives, getMedicineBarcode, getGenericMapping,
@@ -120,8 +124,13 @@ router.post('/medicines/:id/images',        upload.single('image'), uploadMedici
 router.delete('/medicines/:id/images/:imageId', deleteMedicineImage);    // ← NEW
 router.post('/medicines/:id/images/:imageId/set-primary', setPrimaryMedicineImage); // ← NEW
 router.get('/generic-mapping',              getGenericMapping);
-router.get('/rack-management',              getRackManagement);
-router.put('/rack-management/:rackId',      assignMedicineRack);
+
+// ── Rack Management CRUD ──────────────────────────────────────────────────────
+router.get('/rack-management',              getRackManagement);        // List all racks
+router.post('/rack-management',             createRackInv);            // Create new rack
+router.put('/rack-management/:id',          updateRackInv);            // Update rack
+router.delete('/rack-management/:id',       deleteRackInv);            // Delete rack
+router.put('/rack-management/:rackId/assign', assignMedicineRack);    // Assign medicine to rack
 
 // ❌ REMOVED: Tenant Supplier Routes
 // Suppliers are now global - managed through /api/suppliers

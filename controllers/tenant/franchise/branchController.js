@@ -25,6 +25,7 @@ const getBranchModel = (db) =>
 
 // Seed demo branches
 const seedBranches = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy branches
   const Branch = getBranchModel(db);
   if (await Branch.countDocuments() > 0) return;
   await Branch.insertMany([

@@ -22,6 +22,7 @@ import { getPurchaseOrderModel } from '../../../models/tenant/franchise/Purchase
 
 // ── Seed live rates ──────────────────────────────────────────────────────────
 const seedLiveRates = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy live rates
   const LWR = getLiveWholesaleRateModel(db);
   if (await LWR.countDocuments() > 0) return;
   const Medicine = getMedicineModel(db);
@@ -61,6 +62,7 @@ const seedLiveRates = async (db) => {
 };
 
 const seedLiveOrders = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy purchase orders
   // Use PurchaseOrder instead of LiveOrder (unified tracking)
   const PO = getPurchaseOrderModel(db);
   if (await PO.countDocuments({ source: 'live_rates_module' }) > 0) return;

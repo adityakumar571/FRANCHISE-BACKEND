@@ -8,6 +8,7 @@ const TIER_COLORS = { Regular:'#6b7280', Silver:'#94a3b8', Gold:'#d97706', Plati
 
 // Seed customers
 const seedCustomers = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy customers
   const Customer = getCustomerModel(db);
   if (await Customer.countDocuments() > 1) return;
   await Customer.insertMany([

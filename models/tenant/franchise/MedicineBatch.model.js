@@ -8,10 +8,21 @@ const MedicineBatchSchema = new mongoose.Schema({
   qty:          { type: Number, default: 0 },
   freeQty:      { type: Number, default: 0 },
   purchasePrice: { type: Number, default: 0 },
+  ptr:          { type: Number, default: 0 },
   mrp:          { type: Number, default: 0 },
+  gst:          { type: Number, default: 0 },
+  discount:     { type: Number, default: 0 },
   supplierId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
   grnId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GRN' },
-  rackLabel:    { type: String, trim: true },
+  adjustmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockAdjustment' },
+  rackLabel:    { type: String, trim: true }, // Legacy field (kept for backward compatibility)
+  rackLocation: { // New structured rack location (optional, synced from Medicine)
+    rackId:   { type: String, trim: true },
+    shelf:    { type: Number },
+    row:      { type: String, trim: true },
+    column:   { type: Number },
+    position: { type: String, trim: true } // Auto-generated: "A01-1-A-5"
+  },
   isActive:     { type: Boolean, default: true },
 }, { timestamps: true });
 

@@ -59,8 +59,8 @@ export const getMedicines = asyncHandler(async (req, res) => {
     gstPercent:  m.gstPercent,
     currentStock: m.currentStock,
     reorderLevel: m.reorderLevel,
-    rackLabel:   m.rackLabel,
-    rackLocation: withLocation === 'true' ? m.rackLocation : undefined, // Include location if requested
+    rackLabel:   m.rackLocation?.position || m.rackLocation?.rackId || '—',
+    rackLocation: m.rackLocation, // Always include for consistency
     barcode:     m.barcode,
     isActive:    m.isActive,
     imageUrl:    m.imageUrl, // ← Primary image for display
@@ -215,7 +215,8 @@ export const getRackManagement = asyncHandler(async (req, res) => {
   const Rack     = getRackModel(req.db);
   const racks    = await Rack.find({ isActive: true }).lean();
   const result   = await Promise.all(racks.map(async (rack) => {
-    const meds = await Medicine.find({ rackLabel: rack.code, isActive: true }).lean();
+    // Fixed: Use rackLocation.rackId instead of rackLabel (which doesn't exist)
+    const meds = await Medicine.find({ 'rackLocation.rackId': rack.code, isActive: true }).lean();
     return { ...rack, medicines: meds.map(m => ({ _id: m._id, name: m.name, stock: m.currentStock })) };
   }));
   return res.status(200).json(new apiResponse(200, result, 'Rack management fetched'));
@@ -223,10 +224,17 @@ export const getRackManagement = asyncHandler(async (req, res) => {
 
 // ── PUT /api/franchise/rack-management/:rackId — assign medicine to rack
 export const assignMedicineRack = asyncHandler(async (req, res) => {
-  const { medicineId, rackLabel } = req.body;
+  const { medicineId, rackLocation } = req.body;
   const Medicine = getMedicineModel(req.db);
-  await Medicine.findByIdAndUpdate(medicineId, { rackLabel });
-  return res.status(200).json(new apiResponse(200, { medicineId, rackLabel }, 'Rack assigned'));
+  
+  // Validate rackLocation structure
+  if (!rackLocation || !rackLocation.rackId) {
+    return res.status(400).json(new apiResponse(400, null, 'Valid rackLocation object required'));
+  }
+  
+  // Update medicine with rackLocation object (not rackLabel string)
+  await Medicine.findByIdAndUpdate(medicineId, { rackLocation });
+  return res.status(200).json(new apiResponse(200, { medicineId, rackLocation }, 'Rack assigned'));
 });
 
 // ── GET /api/franchise/medicines/meta

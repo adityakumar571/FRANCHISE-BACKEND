@@ -14,6 +14,7 @@ import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.mode
 // ════ STAFF ════════════════════════════════════════════════════════════════════
 
 const seedStaff = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy staff
   const Staff = getFranchiseStaffModel(db);
   if (await Staff.countDocuments() > 0) return;
   await Staff.insertMany([
@@ -103,6 +104,7 @@ export const markAttendance = asyncHandler(async (req, res) => {
 // ════ B2B ORDERS ═══════════════════════════════════════════════════════════════
 
 const seedB2BOrders = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy B2B orders
   const B2B = getB2BOrderModel(db);
   if (await B2B.countDocuments() > 0) return;
   const sups = [
@@ -194,9 +196,9 @@ export const getNotifications = asyncHandler(async (req, res) => {
   const Notification = getNotificationModel(req.db);
   const { category = '', read = '', page = 1, limit = 20 } = req.query;
 
-  // Seed some if empty
+  // Seed some if empty - DISABLED FOR PRODUCTION
   const cnt = await Notification.countDocuments({});
-  if (cnt === 0) {
+  if (cnt === 0 && false) { // Condition disabled - no dummy notifications
     const dummyUserId = null;
     for (const n of NOTIF_SEED) {
       await Notification.create({ ...n, userId: dummyUserId, type: n.category.toLowerCase(), message: n.message, title: n.title });
@@ -249,6 +251,7 @@ export const deleteNotification = asyncHandler(async (req, res) => {
 // ════ AUDIT LOGS ═══════════════════════════════════════════════════════════════
 
 const seedAuditLogs = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy audit logs
   const AuditLog = getFranchiseAuditLogModel(db);
   if (await AuditLog.countDocuments() > 0) return;
   const LOGS = [
@@ -381,6 +384,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
 // ════ SUPPORT ═════════════════════════════════════════════════════════════════
 
 const seedTickets = async (db) => {
+  return; // DISABLED FOR PRODUCTION - No dummy support tickets
   const Ticket = getSupportTicketModel(db);
   if (await Ticket.countDocuments() > 0) return;
   await Ticket.insertMany([

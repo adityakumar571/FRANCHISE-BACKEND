@@ -9,7 +9,8 @@
     "test": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/ --forceExit",
     "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/ --coverage --forceExit",
     "seed:supplier-products": "node scripts/seedSupplierProducts.js",
-    "seed:supplier-orders": "node scripts/seedSupplierOrders.js"
+    "seed:supplier-orders": "node scripts/seedSupplierOrders.js",
+    "migrate:passwords": "node scripts/migratePasswords.js"
   },
   "jest": {
     "testEnvironment": "node",
