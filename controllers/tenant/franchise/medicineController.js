@@ -34,9 +34,9 @@ export const getMedicines = asyncHandler(async (req, res) => {
   const [meds, total, categories, formulations, companies] = await Promise.all([
     Medicine.find(filter).skip(skip).limit(Number(limit)).lean(),
     Medicine.countDocuments(filter),
-    Medicine.distinct('category'),
-    Medicine.distinct('formulation'),
-    Medicine.distinct('company'),
+    Medicine.distinct('category', { isActive: true, category: { $exists: true, $ne: '' } }), // Only from ACTIVE medicines
+    Medicine.distinct('formulation', { isActive: true, formulation: { $exists: true, $ne: '' } }), // Only from ACTIVE medicines
+    Medicine.distinct('company', { isActive: true, company: { $exists: true, $ne: '' } }), // Only from ACTIVE medicines
   ]);
 
   const totalMeds    = await Medicine.countDocuments({});
@@ -59,45 +59,83 @@ export const getMedicines = asyncHandler(async (req, res) => {
     gstPercent:  m.gstPercent,
     currentStock: m.currentStock,
     reorderLevel: m.reorderLevel,
-    rackLabel:   m.rackLocation?.position || m.rackLocation?.rackId || '—',
-    rackLocation: m.rackLocation, // Always include for consistency
+    sku:         m.sku,
+    counterId:   m.counterId,
+    rackLabel:   m.rackLocation?.position || '—',
+    rackLocation: m.rackLocation,  // ← Include full rackLocation object
     barcode:     m.barcode,
     isActive:    m.isActive,
-    imageUrl:    m.imageUrl, // ← Primary image for display
-    images:      m.images, // ← All images array
     stock:       m.currentStock,
     status:      m.currentStock <= 0 ? 'Out of Stock' : m.currentStock <= m.reorderLevel ? 'Low Stock' : 'In Stock',
-    batches:     withLocation === 'true' ? m.batches : undefined, // Include batches if requested
   }));
 
-  return res.status(200).json(new apiResponse(200, {
-    medicines: result, total,
+  // ← Only include categories/formulations/companies + KPI if specifically requested (e.g., for AddMedicine)
+  const response = {
+    medicines: result, 
+    total,
     totalPages: Math.ceil(total / Number(limit)),
     currentPage: Number(page),
-    kpi:         { totalMeds, activeMeds, inactiveMeds, lowStock },
-    categories:  ['All Categories', ...categories.filter(Boolean)],
-    formulations:['All Formulations', ...formulations.filter(Boolean)],
-    companies:   ['All Companies',    ...companies.filter(Boolean)],
-  }, 'Medicines fetched'));
+  };
+
+  // Only add categories/formulations/companies if not layout request
+  if (!req.query.layout) {
+    response.kpi = { totalMeds, activeMeds, inactiveMeds, lowStock };
+    response.categories = ['All Categories', ...categories.filter(Boolean).sort()];
+    response.formulations = ['All Formulations', ...formulations.filter(Boolean).sort()];
+    response.companies = ['All Companies', ...companies.filter(Boolean).sort()];
+  }
+
+  return res.status(200).json(new apiResponse(200, response, 'Medicines fetched'));
 });
 
 // ── POST /api/franchise/medicines
 export const createMedicine = asyncHandler(async (req, res) => {
   const Medicine = getMedicineModel(req.db);
+  const Rack = getRackModel(req.db);
   
   // Validate required fields
   if (!req.body.name || !req.body.salt || !req.body.mrp) {
     return res.status(400).json(new apiResponse(400, null, 'Name, Salt, and MRP are required'));
   }
   
-  // Validate rack location
-  if (!req.body.rackLocation || !req.body.rackLocation.rackId || !req.body.rackLocation.shelf || !req.body.rackLocation.row || !req.body.rackLocation.column) {
-    return res.status(400).json(new apiResponse(400, null, 'Complete rack location is required (rackId, shelf, row, column)'));
-  }
-  
   // Validate at least one batch
   if (!req.body.batches || req.body.batches.length === 0) {
     return res.status(400).json(new apiResponse(400, null, 'At least one batch is required'));
+  }
+  
+  // Validate counter & rack - simplified approach
+  // Frontend sends: { counterId, rackId } OR { rackLocation: { rackId, shelf, row, column } }
+  let rackLocation = req.body.rackLocation;
+  
+  if (!rackLocation) {
+    // NEW: Accept simple counterId + rackId from frontend
+    if (!req.body.counterId || !req.body.rackId) {
+      return res.status(400).json(new apiResponse(400, null, 'Counter and Rack are required'));
+    }
+    
+    // Look up rack to get its code
+    const rack = await Rack.findById(req.body.rackId).lean();
+    if (!rack) {
+      return res.status(400).json(new apiResponse(400, null, 'Rack not found'));
+    }
+    
+    // Auto-generate default rackLocation with shelves/rows/columns
+    // Position format: RACK-CODE-1-A-1 (rackCode-shelf-row-column)
+    rackLocation = {
+      rackId: rack.code,           // Use rack code (e.g. "RACK-A")
+      shelf: 1,                     // Default shelf
+      row: 'A',                     // Default row
+      column: 1,                    // Default column
+      position: `${rack.code}-1-A-1` // Auto-generated position
+    };
+    
+    console.log('🔧 [createMedicine] Auto-generated rackLocation:', rackLocation);
+  } else if (rackLocation && !rackLocation.position) {
+    // If rackLocation provided but position missing, generate it
+    const { rackId, shelf, row, column } = rackLocation;
+    if (rackId && shelf && row && column) {
+      rackLocation.position = `${rackId}-${shelf}-${row}-${column}`;
+    }
   }
   
   // Check if barcode already exists (if provided)
@@ -108,28 +146,38 @@ export const createMedicine = asyncHandler(async (req, res) => {
     }
   }
   
-  // Auto-generate position if not provided
-  if (req.body.rackLocation && !req.body.rackLocation.position) {
-    const { rackId, shelf, row, column } = req.body.rackLocation;
-    req.body.rackLocation.position = `${rackId}-${shelf}-${row}-${column}`;
-  }
-  
   // Create medicine with batches
   const med = await Medicine.create({
-    ...req.body,
+    name: req.body.name,
+    salt: req.body.salt,
+    genericName: req.body.genericName || '',
+    category: req.body.category || '',
+    formulation: req.body.formulation || '',
+    company: req.body.company || '',
+    strength: req.body.strength || '',
+    packSize: req.body.packSize || '',
+    mrp: req.body.mrp,
+    purchasePrice: req.body.purchasePrice || 0,
+    gstPercent: req.body.gstPercent || 12,
+    reorderLevel: req.body.reorderLevel || 20,
+    barcode: req.body.barcode || '',
+    counterId: req.body.counterId,          // NEW: Store counterId
+    rackLocation,                            // Store rackLocation
+    batches: req.body.batches,
     isBatchTracked: true,
     createdBy: req.user?._id
   });
   
-  console.log('✅ Medicine created:', med.name, 'at', med.rackLocation?.position);
+  console.log('✅ Medicine created:', med.name, 'Counter:', req.body.counterId, 'Rack:', req.body.rackId, 'Location:', rackLocation.position);
   
   return res.status(201).json(new apiResponse(201, {
     _id: med._id,
     name: med.name,
+    counterId: med.counterId,
     rackLocation: med.rackLocation,
     currentStock: med.currentStock,
     batches: med.batches
-  }, 'Medicine created successfully with rack location'));
+  }, 'Medicine created successfully'));
 });
 
 // ── PUT /api/franchise/medicines/:id

@@ -69,6 +69,9 @@ const MedicineSchema = new mongoose.Schema({
   batches:        [BatchSchema],
   isBatchTracked: { type: Boolean, default: true },
   
+  // Counter & Rack Assignment
+  counterId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Counter' },
+  
   // Rack Location (Default/Primary Location)
   rackLocation:   {
     rackId:       { type: String, trim: true, index: true },
