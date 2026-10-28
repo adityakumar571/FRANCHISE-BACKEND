@@ -21,20 +21,23 @@ async function seedIfEmpty(type) {
 
 /* ══════════════════════════════════════════
    GET /api/suppliers/masters?type=category
-   Returns all active entries for a given type
+   Returns all entries for a given type (active + inactive for master mgmt)
 ══════════════════════════════════════════ */
 export const getMasters = async (req, res) => {
   try {
-    const { type } = req.query
+    const { type, showAll } = req.query
     if (!type || !['category', 'unit', 'company'].includes(type)) {
       return apiError(res, 400, false, 'type query param required: category | unit | company')
     }
 
     await seedIfEmpty(type)
 
-    const data = await SupplierMaster.find({ type, isActive: true })
-      .sort({ sortOrder: 1, name: 1 })
-      .select('_id name description sortOrder')
+    // showAll=true → include inactive (for Masters management page)
+    const query = showAll === 'true' ? { type } : { type, isActive: true }
+
+    const data = await SupplierMaster.find(query)
+      .sort({ isActive: -1, sortOrder: 1, name: 1 })
+      .select('_id name description sortOrder isActive')
       .lean()
 
     return res.status(200).json(new apiResponse(200, data, `${type} list fetched`))
