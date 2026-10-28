@@ -210,20 +210,38 @@ export const toggleMedicineStatus = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/medicines/:id/batches
 export const getMedicineBatches = asyncHandler(async (req, res) => {
-  const MedicineBatch = getMedicineBatchModel(req.db);
-  const batches = await MedicineBatch.find({ medicineId: req.params.id, isActive: true }).sort({ expiryDate: 1 }).lean();
+  const Medicine = getMedicineModel(req.db);
+  const med = await Medicine.findById(req.params.id).lean();
+  if (!med) return res.status(404).json(new apiResponse(404, null, 'Medicine not found'));
+
   const now = new Date();
-  const result = batches.map(b => ({
-    _id:          b._id,
-    batchNo:      b.batchNo,
-    expiryDate:   new Date(b.expiryDate).toLocaleDateString('en-IN'),
-    qty:          b.qty,
-    purchasePrice:b.purchasePrice,
-    mrp:          b.mrp,
-    rackLabel:    b.rackLabel,
-    daysLeft:     Math.ceil((new Date(b.expiryDate) - now) / 86400000),
-  }));
-  return res.status(200).json(new apiResponse(200, result, 'Batches fetched'));
+  const sixtyDays = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+
+  // Primary: use embedded batches (drives currentStock via pre-save hook)
+  const embedded = (med.batches || []).filter(b => b.isActive !== false).map(b => {
+    const expiry    = new Date(b.expiryDate);
+    const daysLeft  = Math.ceil((expiry - now) / 86400000);
+    const isExpired = expiry < now;
+    const isNear    = !isExpired && expiry <= sixtyDays;
+    return {
+      _id:           b._id,
+      batchNo:       b.batchNo,
+      mfgDate:       b.mfgDate ? new Date(b.mfgDate).toLocaleDateString('en-IN') : '—',
+      expiryDate:    expiry.toLocaleDateString('en-IN'),
+      expiryRaw:     b.expiryDate,
+      qty:           b.availableQty ?? b.quantity ?? 0,
+      stock:         b.availableQty ?? b.quantity ?? 0,
+      purchasePrice: b.purchasePrice || 0,
+      mrp:           b.mrp || 0,
+      supplierName:  b.supplierName || '—',
+      supplierId:    b.supplierId || null,
+      rackLocation:  b.rackLocation || med.rackLocation || {},
+      daysLeft,
+      status: isExpired ? 'Expired' : isNear ? 'Expiring Soon' : (b.availableQty ?? b.quantity ?? 0) === 0 ? 'Out of Stock' : 'Active',
+    };
+  }).sort((a, b) => new Date(a.expiryRaw) - new Date(b.expiryRaw)); // FIFO order
+
+  return res.status(200).json(new apiResponse(200, embedded, 'Batches fetched'));
 });
 
 // ── GET /api/franchise/medicines/:id/alternatives

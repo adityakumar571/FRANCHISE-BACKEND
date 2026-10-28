@@ -443,12 +443,12 @@ export const createGRN = asyncHandler(async (req, res) => {
   const { supplierId, supplier, poRef, invoiceNo, invoiceDate, items } = req.body;
   if (!supplier || !items?.length) return res.status(400).json(new apiResponse(400, null, 'Supplier and items required'));
 
-  const GRN      = getGRNModel(req.db);
-  const Medicine = getMedicineModel(req.db);
+  const GRN           = getGRNModel(req.db);
+  const Medicine      = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
 
-  const count   = await GRN.countDocuments();
-  const grnNo   = `GRN-${String(count + 1051).padStart(4, '0')}`;
+  const count    = await GRN.countDocuments();
+  const grnNo    = `GRN-${String(count + 1051).padStart(4, '0')}`;
   const totalAmt = items.reduce((s, i) => s + (i.qty * i.ptr || 0), 0);
 
   const grn = await GRN.create({
@@ -457,29 +457,55 @@ export const createGRN = asyncHandler(async (req, res) => {
     items, totalAmt, status: 'completed',
   });
 
-  // Update medicine stock and create batches
+  // Update medicine stock + push batch into Medicine.batches[] for FIFO/expiry tracking
   for (const item of items) {
-    if (item.medicineName) {
-      const med = await Medicine.findOneAndUpdate(
-        { name: new RegExp(item.medicineName, 'i'), isActive: true },
-        { $inc: { currentStock: Number(item.qty) + Number(item.freeQty || 0) } },
-        { new: true }
-      );
-      if (med && item.batchNo) {
-        await MedicineBatch.create({
-          medicineId:    med._id,
-          batchNo:       item.batchNo,
-          expiryDate:    item.expiry ? new Date(`${item.expiry}-01`) : new Date(Date.now() + 365 * 86400000),
-          qty:           Number(item.qty) + Number(item.freeQty || 0),
-          purchasePrice: Number(item.ptr) || 0,
-          mrp:           Number(item.mrp) || 0,
-          supplierId,
-          grnId:         grn._id,
-          rackLabel:     item.rack || item.rackLabel || '', // Legacy field
-          rackLocation:  med.rackLocation || {}, // Sync from medicine
-          isActive:      true,
-        });
-      }
+    if (!item.medicineName) continue;
+
+    const totalQty = Number(item.qty) + Number(item.freeQty || 0);
+    const expiryDate = item.expiry
+      ? new Date(`${item.expiry}-01`)
+      : new Date(Date.now() + 365 * 86400000);
+
+    // Find medicine by name
+    const med = await Medicine.findOne(
+      { name: new RegExp(`^${item.medicineName}$`, 'i'), isActive: true }
+    );
+    if (!med) continue;
+
+    // Build the new batch object (matches BatchSchema embedded in Medicine)
+    const newBatch = {
+      batchNo:       item.batchNo || `GRN-${Date.now()}`,
+      expiryDate,
+      quantity:      totalQty,
+      availableQty:  totalQty,
+      mrp:           Number(item.mrp)  || 0,
+      purchasePrice: Number(item.ptr)  || 0,
+      supplierId:    supplierId || '',
+      supplierName:  supplier   || '',
+      purchaseDate:  new Date(),
+      isActive:      true,
+      rackLocation:  med.rackLocation || {},
+    };
+
+    // Push batch into Medicine.batches[] — pre-save hook will recalculate currentStock
+    med.batches.push(newBatch);
+    await med.save(); // triggers pre-save: currentStock = sum(availableQty of active batches)
+
+    // Also write to MedicineBatch collection for ledger/reporting
+    if (item.batchNo) {
+      await MedicineBatch.create({
+        medicineId:    med._id,
+        batchNo:       item.batchNo,
+        expiryDate,
+        qty:           totalQty,
+        purchasePrice: Number(item.ptr) || 0,
+        mrp:           Number(item.mrp) || 0,
+        supplierId,
+        grnId:         grn._id,
+        rackLabel:     item.rack || item.rackLabel || '',
+        rackLocation:  med.rackLocation || {},
+        isActive:      true,
+      });
     }
   }
 
