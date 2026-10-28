@@ -14,6 +14,7 @@ import {
   // New medicine routes
   getMedicineMeta, getMedicineGenericMapping, deleteGenericMapping, deleteAlternative,
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
+  getOccupiedSlots,
   // NEW: Rack Location & Batch Management
   getMedicinesByRack, searchByLocation, updateMedicineLocation,
   addBatchToMedicine, getExpiringSoon, getExpiredMedicines,
@@ -89,7 +90,8 @@ const upload = multer({
 });
 
 // ── Medicines ─────────────────────────────────────────────────────────────────
-router.get('/medicines/meta',               getMedicineMeta);         // ← NEW: dropdown data
+router.get('/medicines/meta',               getMedicineMeta);
+router.get('/medicines/occupied-slots',     getOccupiedSlots);   // ← occupied positions per rack
 
 // ── Medicine Masters (Category / Unit / Company) — shared with Supplier Portal ──
 router.get('/medicines/masters/all',        getAllMasters);

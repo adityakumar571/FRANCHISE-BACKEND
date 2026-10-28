@@ -103,41 +103,43 @@ export const createMedicine = asyncHandler(async (req, res) => {
     return res.status(400).json(new apiResponse(400, null, 'At least one batch is required'));
   }
   
-  // Validate counter & rack - simplified approach
-  // Frontend sends: { counterId, rackId } OR { rackLocation: { rackId, shelf, row, column } }
+  // Build rackLocation from frontend
   let rackLocation = req.body.rackLocation;
   
   if (!rackLocation) {
-    // NEW: Accept simple counterId + rackId from frontend
     if (!req.body.counterId || !req.body.rackId) {
       return res.status(400).json(new apiResponse(400, null, 'Counter and Rack are required'));
     }
-    
-    // Look up rack to get its code
     const rack = await Rack.findById(req.body.rackId).lean();
     if (!rack) {
       return res.status(400).json(new apiResponse(400, null, 'Rack not found'));
     }
-    
-    // Auto-generate default rackLocation with shelves/rows/columns
-    // Position format: RACK-CODE-1-A-1 (rackCode-shelf-row-column)
     rackLocation = {
-      rackId: rack.code,           // Use rack code (e.g. "RACK-A")
-      shelf: 1,                     // Default shelf
-      row: 'A',                     // Default row
-      column: 1,                    // Default column
-      position: `${rack.code}-1-A-1` // Auto-generated position
+      rackId: rack.code, shelf: 1, row: 'A', column: 1,
+      position: `${rack.code}-1-A-1`
     };
-    
-    console.log('🔧 [createMedicine] Auto-generated rackLocation:', rackLocation);
   } else if (rackLocation && !rackLocation.position) {
-    // If rackLocation provided but position missing, generate it
     const { rackId, shelf, row, column } = rackLocation;
     if (rackId && shelf && row && column) {
       rackLocation.position = `${rackId}-${shelf}-${row}-${column}`;
     }
   }
-  
+
+  // ── COLLISION CHECK (Real-world: one medicine per slot) ──────────────────
+  if (rackLocation.position) {
+    const occupied = await Medicine.findOne({
+      'rackLocation.position': rackLocation.position,
+      isActive: true,
+    }).select('name').lean();
+    if (occupied) {
+      return res.status(409).json(new apiResponse(409, {
+        occupiedBy: occupied.name,
+        position: rackLocation.position,
+      }, `Position ${rackLocation.position} is already occupied by "${occupied.name}". Please choose a different slot.`));
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Check if barcode already exists (if provided)
   if (req.body.barcode) {
     const existing = await Medicine.findOne({ barcode: req.body.barcode });
@@ -161,8 +163,8 @@ export const createMedicine = asyncHandler(async (req, res) => {
     gstPercent: req.body.gstPercent || 12,
     reorderLevel: req.body.reorderLevel || 20,
     barcode: req.body.barcode || '',
-    counterId: req.body.counterId,          // NEW: Store counterId
-    rackLocation,                            // Store rackLocation
+    counterId: req.body.counterId,
+    rackLocation,
     batches: req.body.batches,
     isBatchTracked: true,
     createdBy: req.user?._id
@@ -299,6 +301,31 @@ export const getMedicineMeta = asyncHandler(async (req, res) => {
     formulations: formulations.filter(Boolean).sort(),
     companies:    companies.filter(Boolean).sort(),
   }, 'Meta fetched'));
+});
+
+// ── GET /api/franchise/medicines/occupied-slots?rackId=RACK-A
+// Returns all occupied positions in a rack so frontend can show a visual slot grid
+export const getOccupiedSlots = asyncHandler(async (req, res) => {
+  const { rackId } = req.query;
+  if (!rackId) return res.status(400).json(new apiResponse(400, null, 'rackId is required'));
+
+  const Medicine = getMedicineModel(req.db);
+  const occupied = await Medicine.find({
+    'rackLocation.rackId': rackId,
+    isActive: true,
+  }).select('name rackLocation currentStock').lean();
+
+  // Map: position → medicine info
+  const slots = occupied.map(m => ({
+    position: m.rackLocation.position,
+    shelf:    m.rackLocation.shelf,
+    row:      m.rackLocation.row,
+    column:   m.rackLocation.column,
+    name:     m.name,
+    stock:    m.currentStock,
+  }));
+
+  return res.status(200).json(new apiResponse(200, slots, `${slots.length} slots occupied in ${rackId}`));
 });
 
 // ── GET /api/franchise/medicines/:id/generic
