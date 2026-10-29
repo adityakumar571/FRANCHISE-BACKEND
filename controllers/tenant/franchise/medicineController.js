@@ -159,6 +159,7 @@ export const getMedicines = asyncHandler(async (req, res) => {
       sku: m.sku,
       barcode: m.barcode,
       imageUrl: m.imageUrl,
+      batches: m.batches || [],
       counterId: counterObj, // ← Full object
       counterName: counterObj?.name || counterObj?.code || "—",
       rackLabel: m.rackLocation?.position || "—",

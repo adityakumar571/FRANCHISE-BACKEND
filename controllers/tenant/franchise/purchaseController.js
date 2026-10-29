@@ -421,12 +421,14 @@ export const getGRNList = asyncHandler(async (req, res) => {
   const result = grns.map(g => ({
     _id:      g._id,
     grnNo:    g.grnNo,
-    poRef:    g.poRef,
+    poRef:    g.poRef || '—',
     supplier: g.supplier,
-    invoiceNo: g.invoiceNo,
-    items:    g.items?.length || 0,
+    invoiceNo: g.invoiceNo || '—',
+    items:    g.items || [],
+    itemCount: g.items?.length || 0,
     status:   g.status,
     date:     new Date(g.createdAt).toISOString().split('T')[0],
+    createdAt: new Date(g.createdAt).toISOString(),
   }));
 
   return res.status(200).json(new apiResponse(200, {
@@ -487,9 +489,29 @@ export const createGRN = asyncHandler(async (req, res) => {
       rackLocation:  med.rackLocation || {},
     };
 
-    // Push batch into Medicine.batches[] — pre-save hook will recalculate currentStock
-    med.batches.push(newBatch);
-    await med.save(); // triggers pre-save: currentStock = sum(availableQty of active batches)
+    // Check if same batch already exists (prevent duplicates)
+    const existingBatchIndex = med.batches.findIndex(
+      b => b.batchNo === item.batchNo && 
+           new Date(b.expiryDate).getTime() === expiryDate.getTime()
+    );
+
+    if (existingBatchIndex !== -1) {
+      // If batch exists with same batchNo and expiry, INCREASE quantity instead of duplicating
+      med.batches[existingBatchIndex].quantity += totalQty;
+      med.batches[existingBatchIndex].availableQty += totalQty;
+    } else {
+      // New batch - push it
+      med.batches.push(newBatch);
+    }
+
+    // Manually calculate currentStock from all active batches
+    const calculatedStock = med.batches.reduce((sum, batch) => {
+      const qty = batch.availableQty !== undefined ? batch.availableQty : batch.quantity;
+      return sum + (batch.isActive !== false ? qty : 0);
+    }, 0);
+
+    med.currentStock = calculatedStock;
+    await med.save(); // Save with calculated stock
 
     // Also write to MedicineBatch collection for ledger/reporting
     if (item.batchNo) {

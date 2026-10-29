@@ -14,7 +14,6 @@ import {
   // New medicine routes
   getMedicineMeta, getMedicineGenericMapping, deleteGenericMapping, deleteAlternative,
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
-  getOccupiedSlots,
   // NEW: Rack Location & Batch Management
   getMedicinesByRack, searchByLocation, updateMedicineLocation,
   getOccupiedSlots,
