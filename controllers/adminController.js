@@ -1,6 +1,7 @@
 import { getUserModel } from "../models/tenant/user.model.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import bcrypt from "bcrypt";
 
 
 // 🔹 Helper: Generate Password
@@ -180,5 +181,40 @@ export const deleteAdmin = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     new apiResponse(200, null, "Admin deleted successfully ")
+  );
+});
+
+export const resetAdminPassword = asyncHandler(async (req, res) => {
+  const User = getUserModel(req.db);
+  
+  const { userId, newPassword } = req.body;
+
+  if (!userId || !newPassword) {
+    return res.status(400).json(
+      new apiResponse(400, null, "userId and newPassword are required")
+    );
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json(
+      new apiResponse(400, null, "Password must be at least 6 characters long")
+    );
+  }
+
+  const admin = await User.findOne({ userId });
+  if (!admin) {
+    return res.status(404).json(new apiResponse(404, null, "Admin not found"));
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  
+  const updated = await User.findOneAndUpdate(
+    { userId },
+    { $set: { password: hashedPassword } },
+    { new: true }
+  ).select("-password");
+
+  return res.status(200).json(
+    new apiResponse(200, updated, "Password reset successfully")
   );
 });

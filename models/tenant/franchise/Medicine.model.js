@@ -36,7 +36,7 @@ const MedicineSchema = new mongoose.Schema({
   salt:           { type: String, trim: true },
   brand:          { type: String, trim: true },
   strength:       { type: String, trim: true },
-  formulation:    { type: String, trim: true }, // Tablet, Capsule, Syrup, Injection, etc.
+  formulation:    { type: String, trim: true }, // Tablet, Capsule, Syrup, Injection, etc. (stores name or ID)
   category:       { type: String, trim: true, index: true },
   company:        { type: String, trim: true },
   unit:           { type: String, trim: true, default: 'Tablet' },

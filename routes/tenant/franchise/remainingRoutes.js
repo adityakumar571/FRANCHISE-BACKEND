@@ -16,6 +16,7 @@ import {
   getMedicineImages, uploadMedicineImage, deleteMedicineImage, setPrimaryMedicineImage,
   // NEW: Rack Location & Batch Management
   getMedicinesByRack, searchByLocation, updateMedicineLocation,
+  getOccupiedSlots,
   addBatchToMedicine, getExpiringSoon, getExpiredMedicines,
   generateBarcode, getRackSummary,
 } from '../../../controllers/tenant/franchise/medicineController.js';
@@ -99,8 +100,9 @@ router.put('/medicines/masters/:id',        updateMaster);
 router.delete('/medicines/masters/:id',     deleteMaster);
 
 // ── NEW: Rack & Batch Management (placed before :id routes to avoid conflicts) ──
-router.get('/medicines/search-by-location', searchByLocation);        // ← NEW: search by position
-router.get('/medicines/expiring-soon',      getExpiringSoon);         // ← NEW: expiring batches
+router.get('/medicines/search-by-location', searchByLocation);        // search by position
+router.get('/medicines/occupied-slots',     getOccupiedSlots);         // slots used in rack (for AddMedicine grid)
+router.get('/medicines/expiring-soon',      getExpiringSoon);
 router.get('/medicines/expired',            getExpiredMedicines);     // ← NEW: expired batches
 router.post('/medicines/barcode/generate',  generateBarcode);         // ← NEW: generate barcode
 router.get('/medicines/rack-summary',       getRackSummary);          // ← NEW: rack summary

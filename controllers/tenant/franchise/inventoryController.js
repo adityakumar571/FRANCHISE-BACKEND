@@ -795,7 +795,7 @@ export const approveStockAdjustment = asyncHandler(async (req, res) => {
   // Create batch entry if batch details provided and it's stock addition
   if (adj.batchDetails && stockChange > 0) {
     const batch = adj.batchDetails;
-    await MedicineBatch.create({
+    const batchRecord = await MedicineBatch.create({
       medicineId: med._id,
       batchNo: batch.batchNo || adj.batch,
       expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : new Date(Date.now() + 365 * 86400000),
@@ -811,6 +811,8 @@ export const approveStockAdjustment = asyncHandler(async (req, res) => {
       rackLocation: med.rackLocation,
       isActive: true,
     });
+
+    console.log('✅ Batch created and linked:', batchRecord.batchNo, 'Medicine:', med.name);
   }
 
   return res.status(200).json(new apiResponse(200, {
@@ -818,8 +820,14 @@ export const approveStockAdjustment = asyncHandler(async (req, res) => {
     adjNo: adj.adjNo,
     status: adj.status,
     stockChange,
-    newStock: med.currentStock
-  }, `Adjustment approved and stock updated. New stock: ${med.currentStock}`));
+    newStock: med.currentStock,
+    medicine: {
+      _id: med._id,
+      name: med.name,
+      previousStock: med.currentStock - stockChange,
+      newStock: med.currentStock
+    }
+  }, `✅ Adjustment approved! ${med.name}: ${med.currentStock - stockChange} + ${stockChange} = ${med.currentStock}`));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
