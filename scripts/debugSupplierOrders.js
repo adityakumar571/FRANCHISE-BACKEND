@@ -11,7 +11,7 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Supplier from '../models/Supplier.model.js'
-import Tenant from '../models/Tenant.model.js'
+import Tenant from '../models/tenant.model.js' // Fixed: lowercase for Linux compatibility
 import { getTenantDB } from '../utils/dbManager.js'
 
 dotenv.config()

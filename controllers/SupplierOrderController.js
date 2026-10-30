@@ -3,7 +3,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import mongoose from 'mongoose';
 import { getTenantDB } from '../utils/dbManager.js';
-import Tenant from '../models/Tenant.model.js';
+import Tenant from '../models/tenant.model.js'; // Fixed: lowercase for Linux compatibility
 
 // Suppliers are global and POs are in tenant DBs - we query across all tenant databases
 
