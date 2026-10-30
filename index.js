@@ -111,6 +111,26 @@ app.use('/uploads', express.static('uploads'));
 /* ══════════════════════════════════════════
    PUBLIC ROUTES (no tenant context)
 ══════════════════════════════════════════ */
+// Health check
+app.get("/", (req, res) => {
+  res.json({ 
+    success: true, 
+    message: "Franchise Backend API ✅", 
+    version: "2.0.0",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    success: true, 
+    status: "healthy", 
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Setup routes (one-time Super Admin creation)
 import setupRoutes from "./routes/setup.routes.js";
 app.use("/api/setup", setupRoutes);
