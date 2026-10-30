@@ -111,6 +111,10 @@ app.use('/uploads', express.static('uploads'));
 /* ══════════════════════════════════════════
    PUBLIC ROUTES (no tenant context)
 ══════════════════════════════════════════ */
+// Setup routes (one-time Super Admin creation)
+import setupRoutes from "./routes/setup.routes.js";
+app.use("/api/setup", setupRoutes);
+
 app.use("/api/mainUser",            mainUserRoutes);
 // SuperAdmin login — public, no tenant context needed
 // Frontend calls: POST /api/auth/superadmin/login
