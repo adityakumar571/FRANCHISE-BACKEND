@@ -70,12 +70,20 @@ const run = async () => {
       console.log('⚠️   SuperAdmin already exists!');
       console.log(`     User ID  : ${existing.userId}`);
       console.log(`     Role     : ${existing.role}`);
-      console.log('\nChange karna ho to DB se purana record delete karo ya userId update karo.');
+      console.log('\n🔄  Updating password to use bcrypt...');
+      
+      // Update password (will be auto-hashed by pre-save hook)
+      existing.password = SUPER_ADMIN.password;
+      await existing.save();
+      
+      console.log('✅  Password updated with bcrypt hash!\n');
+      console.log('📋  Login Credentials:');
+      console.log(`     User ID  : ${SUPER_ADMIN.userId}`);
+      console.log(`     Password : ${SUPER_ADMIN.password}\n`);
       return;
     }
 
-    // NOTE: Login controller plain text compare karta hai (user.password === password)
-    // isliye password plain text store ho raha hai — same as existing app logic
+    // Create new SuperAdmin (password will be auto-hashed by pre-save hook)
     const superAdmin = await User.create({
       userId:   SUPER_ADMIN.userId,
       name:     SUPER_ADMIN.name,
