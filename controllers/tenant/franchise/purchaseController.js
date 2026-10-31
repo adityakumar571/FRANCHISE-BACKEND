@@ -595,6 +595,7 @@ export const createPurchaseReturn = asyncHandler(async (req, res) => {
 
   const PurchaseReturn = getPurchaseReturnModel(req.db);
   const Medicine       = getMedicineModel(req.db);
+  const MedicineBatch  = getMedicineBatchModel(req.db);
 
   const count    = await PurchaseReturn.countDocuments();
   const returnNo = `PR-${String(count + 102).padStart(3, '0')}`;
@@ -605,65 +606,182 @@ export const createPurchaseReturn = asyncHandler(async (req, res) => {
     totalAmt, status: 'pending', notes,
   });
 
-  // Deduct returned stock
+  // Process returned items - reduce from batches
   for (const item of items) {
-    if (item.medicineName) {
-      await Medicine.findOneAndUpdate(
-        { name: new RegExp(item.medicineName, 'i'), isActive: true },
-        { $inc: { currentStock: -Number(item.qty) } }
-      );
+    if (!item.medicineName || !item.medicineId) continue;
+
+    const medicine = await Medicine.findById(item.medicineId);
+    if (!medicine) continue;
+
+    const returnQty = Number(item.qty || 0);
+    if (returnQty <= 0) continue;
+
+    // Find the batch with the matching batchNo to reduce quantity
+    if (item.batchNo && medicine.batches.length > 0) {
+      const batch = medicine.batches.find(b => b.batchNo === item.batchNo);
+      if (batch) {
+        // Reduce availableQty from this specific batch
+        const newAvailableQty = Math.max(0, (batch.availableQty || batch.quantity || 0) - returnQty);
+        
+        // Update batch
+        await Medicine.findByIdAndUpdate(
+          item.medicineId,
+          {
+            $set: {
+              'batches.$[elem].availableQty': newAvailableQty,
+            },
+          },
+          { arrayFilters: [{ 'elem.batchNo': item.batchNo }] }
+        );
+
+        // Update MedicineBatch ledger if it exists
+        await MedicineBatch.findOneAndUpdate(
+          { medicineId: item.medicineId, batchNo: item.batchNo, isActive: true },
+          { $inc: { qty: -returnQty } }
+        );
+      }
+    } else {
+      // If no batch specified, reduce from any active batch (FIFO - reduce from first)
+      const activeBatch = medicine.batches.find(b => b.isActive && (b.availableQty || b.quantity) > 0);
+      if (activeBatch) {
+        const newAvailableQty = Math.max(0, (activeBatch.availableQty || activeBatch.quantity || 0) - returnQty);
+        
+        await Medicine.findByIdAndUpdate(
+          item.medicineId,
+          {
+            $set: {
+              'batches.$[elem].availableQty': newAvailableQty,
+            },
+          },
+          { arrayFilters: [{ 'elem._id': activeBatch._id }] }
+        );
+
+        await MedicineBatch.findOneAndUpdate(
+          { medicineId: item.medicineId, batchNo: activeBatch.batchNo, isActive: true },
+          { $inc: { qty: -returnQty } }
+        );
+      }
     }
+
+    // Update medicine currentStock via pre-hook (it sums up all batch availableQty)
+    await Medicine.findByIdAndUpdate(item.medicineId, { $inc: { currentStock: -returnQty } });
   }
 
   return res.status(201).json(new apiResponse(201, { _id: ret._id, returnNo: ret.returnNo }, 'Purchase return submitted'));
 });
 
 // ── GET /api/franchise/purchase/supplier-ledger?supplierId=&from=&to=&page=&limit=
+// Returns all suppliers with GRN and Purchase Returns transactions
 export const getPurchaseSupplierLedger = asyncHandler(async (req, res) => {
   const { supplierId, from, to, page = 1, limit = 20 } = req.query;
-  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
-  const Supplier        = getSupplierModel(req.db);
+  const GRN           = getGRNModel(req.db);
+  const PurchaseReturn = getPurchaseReturnModel(req.db);
+  const Supplier      = getSupplierModel(req.db);
 
   const filter = {};
-  if (supplierId) filter.supplierId = supplierId;
+  if (supplierId) filter.supplier = new RegExp(supplierId, 'i');
   if (from || to) {
-    filter.billDate = {};
-    if (from) { const d = new Date(from); d.setHours(0,0,0,0);      filter.billDate.$gte = d; }
-    if (to)   { const d = new Date(to);   d.setHours(23,59,59,999); filter.billDate.$lte = d; }
+    filter.createdAt = {};
+    if (from) { const d = new Date(from); d.setHours(0,0,0,0);      filter.createdAt.$gte = d; }
+    if (to)   { const d = new Date(to);   d.setHours(23,59,59,999); filter.createdAt.$lte = d; }
   }
 
-  const skip = (Number(page) - 1) * Number(limit);
-  const [invoices, total] = await Promise.all([
-    PurchaseInvoice.find(filter).sort({ billDate: -1 }).skip(skip).limit(Number(limit)).lean(),
-    PurchaseInvoice.countDocuments(filter),
-  ]);
-
-  // Aggregate totals
-  const agg = await PurchaseInvoice.aggregate([
+  // Get all unique suppliers from GRN
+  const suppliersData = await GRN.aggregate([
     { $match: filter },
-    { $group: { _id: null, totalPurchase: { $sum: '$totalAmt' }, totalPaid: { $sum: '$paidAmt' }, totalDue: { $sum: '$dueAmt' } } },
+    { $group: { 
+        _id: '$supplier',
+        totalPurchase: { $sum: '$totalAmt' },
+        grnCount: { $sum: 1 },
+        lastGRN: { $max: '$createdAt' }
+      }
+    },
+    { $sort: { lastGRN: -1 } }
   ]);
 
-  // Get supplier list for dropdown
-  const suppliers = await Supplier.find({ isActive: true }).select('_id name supplierCode').lean();
+  // Get returns per supplier
+  const returnsData = await PurchaseReturn.aggregate([
+    { $match: filter },
+    { $group: {
+        _id: '$supplier',
+        totalReturns: { $sum: '$totalAmt' },
+        returnCount: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const returnsMap = {};
+  returnsData.forEach(r => {
+    returnsMap[r._id] = { totalReturns: r.totalReturns, returnCount: r.returnCount };
+  });
+
+  // Build supplier summary
+  const suppliers = suppliersData.map(s => {
+    const returns = returnsMap[s._id] || { totalReturns: 0, returnCount: 0 };
+    const outstanding = s.totalPurchase - returns.totalReturns;
+    return {
+      supplier:     s._id,
+      totalPurchase: s.totalPurchase,
+      totalReturns:  returns.totalReturns,
+      outstanding:   Math.max(0, outstanding),
+      grnCount:      s.grnCount,
+      returnCount:   returns.returnCount,
+      lastTxn:       s.lastGRN,
+    };
+  });
+
+  const total = suppliers.length;
+  const skip = (Number(page) - 1) * Number(limit);
+  const paginatedSuppliers = suppliers.slice(skip, skip + Number(limit));
+
+  // Get detailed transactions for selected supplier (if provided)
+  let ledgerEntries = [];
+  if (supplierId) {
+    const grnTransactions = await GRN.find({ supplier: new RegExp(supplierId, 'i') }).sort({ createdAt: -1 }).lean();
+    const returnTransactions = await PurchaseReturn.find({ supplier: new RegExp(supplierId, 'i') }).sort({ createdAt: -1 }).lean();
+
+    ledgerEntries = [
+      ...grnTransactions.map(g => ({
+        date:    new Date(g.createdAt).toISOString().split('T')[0],
+        type:    'Purchase',
+        refNo:   g.grnNo,
+        debit:   g.totalAmt,
+        credit:  0,
+        balance: 0,
+        _id:     g._id,
+      })),
+      ...returnTransactions.map(r => ({
+        date:    new Date(r.createdAt).toISOString().split('T')[0],
+        type:    'Return',
+        refNo:   r.returnNo,
+        debit:   0,
+        credit:  r.totalAmt,
+        balance: 0,
+        _id:     r._id,
+      }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Calculate running balance
+    let balance = 0;
+    ledgerEntries.forEach(entry => {
+      balance += (entry.debit || 0) - (entry.credit || 0);
+      entry.balance = balance;
+    });
+  }
 
   return res.status(200).json(new apiResponse(200, {
-    entries: invoices.map(inv => ({
-      _id:          inv._id,
-      date:         new Date(inv.billDate).toLocaleDateString('en-IN'),
-      billNo:       inv.billNo,
-      supplierName: inv.supplierName || '—',
-      totalAmt:     inv.totalAmt,
-      paidAmt:      inv.paidAmt || 0,
-      dueAmt:       inv.dueAmt  || inv.totalAmt - (inv.paidAmt || 0),
-      status:       inv.status,
-      paymentMode:  inv.paymentMode || '—',
-    })),
+    suppliers: paginatedSuppliers,
     total,
-    totalPages:    Math.ceil(total / Number(limit)),
-    summary:       agg[0] || { totalPurchase: 0, totalPaid: 0, totalDue: 0 },
-    suppliers:     suppliers.map(s => ({ _id: s._id, name: s.name, code: s.supplierCode })),
-  }, 'Purchase supplier ledger fetched'));
+    totalPages:     Math.ceil(total / Number(limit)),
+    currentPage:    Number(page),
+    ledger:         ledgerEntries,
+    summary: {
+      totalSuppliers: total,
+      totalOutstanding: suppliers.reduce((s, sup) => s + sup.outstanding, 0),
+      totalPurchase: suppliers.reduce((s, sup) => s + sup.totalPurchase, 0),
+      totalReturns:  suppliers.reduce((s, sup) => s + sup.totalReturns, 0),
+    }
+  }, 'Supplier ledger fetched'));
 });
 
 // ── GET /api/franchise/purchase/live-rate?medicine=&supplierId=
