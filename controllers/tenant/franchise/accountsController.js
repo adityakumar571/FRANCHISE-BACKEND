@@ -3,6 +3,12 @@ import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { apiResponse } from '../../../utils/apiResponse.js';
 import { getSaleInvoiceModel } from '../../../models/tenant/franchise/SaleInvoice.model.js';
 import { getPurchaseInvoiceModel } from '../../../models/tenant/franchise/PurchaseInvoice.model.js';
+import { getJournalEntryModel } from '../../../models/tenant/franchise/JournalEntry.model.js';
+import { getReceiptModel } from '../../../models/tenant/franchise/Receipt.model.js';
+import { getPaymentModel } from '../../../models/tenant/franchise/Payment.model.js';
+import { getExpenseModel } from '../../../models/tenant/franchise/Expense.model.js';
+import { getOpeningBalanceModel } from '../../../models/tenant/franchise/OpeningBalance.model.js';
+import { getAccountMasterModel } from '../../../models/tenant/franchise/AccountMaster.model.js';
 
 // Helper: parse date range
 const dateRange = (from, to) => {
@@ -18,10 +24,12 @@ export const getDayBook = asyncHandler(async (req, res) => {
   const range = dateRange(from, to);
   const SaleInvoice    = getSaleInvoiceModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const JournalEntry   = getJournalEntryModel(req.db);
 
-  const [sales, purchases] = await Promise.all([
+  const [sales, purchases, journals] = await Promise.all([
     SaleInvoice.find({ invoiceDate: range, status: { $ne: 'Cancelled' } }).lean(),
     PurchaseInvoice.find({ billDate: range, status: { $ne: 'Cancelled' } }).lean(),
+    JournalEntry.find({ entryDate: range, status: 'Posted' }).lean(),
   ]);
 
   let entries = [
@@ -39,7 +47,13 @@ export const getDayBook = asyncHandler(async (req, res) => {
       particulars:`Purchase - ${p.supplierName}`,
       debit: p.totalAmt, credit: null, type: 'Purchase',
     })),
-    { _id: 'j1', date: new Date().toLocaleDateString('en-IN'), voucher: 'JV-001', particulars: 'Journal Entries', debit: null, credit: 22400, type: 'Journal' },
+    ...journals.map(j => ({
+      _id:        j._id,
+      date:       new Date(j.entryDate).toLocaleDateString('en-IN'),
+      voucher:    j.jvNo,
+      particulars: j.narration,
+      debit: j.totalDebit, credit: j.totalCredit, type: 'Journal',
+    })),
   ];
 
   entries.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -64,30 +78,91 @@ export const getCashBook = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, search = '' } = req.query;
   const range = dateRange(from, to);
   const SaleInvoice = getSaleInvoiceModel(req.db);
+  const Receipt     = getReceiptModel(req.db);
+  const Payment     = getPaymentModel(req.db);
+  const OpeningBalance = getOpeningBalanceModel(req.db);
 
-  const sales = await SaleInvoice.find({ invoiceDate: range, paymentMode: 'Cash', status: { $ne: 'Cancelled' } }).sort({ invoiceDate: 1 }).lean();
+  // Get current fiscal year opening balance
+  const currentFY = new Date().getFullYear();
+  const fyStart = `${currentFY}-${currentFY + 1}`;
+  const obData = await OpeningBalance.findOne({ fiscalYear: fyStart }).lean();
+  
+  // Calculate opening balance for Cash
+  let openingBalance = 0;
+  if (obData && obData.entries) {
+    const cashEntry = obData.entries.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('cash'));
+    openingBalance = cashEntry ? (cashEntry.openingDebit - cashEntry.openingCredit) : 0;
+  }
 
-  let balance = 25280;
+  // Get cash transactions
+  const [cashSales, receipts, payments] = await Promise.all([
+    SaleInvoice.find({ invoiceDate: range, paymentMode: 'Cash', status: { $ne: 'Cancelled' } }).sort({ invoiceDate: 1 }).lean(),
+    Receipt.find({ receiptDate: range, mode: 'Cash', status: { $ne: 'Cancelled' } }).sort({ receiptDate: 1 }).lean(),
+    Payment.find({ paymentDate: range, mode: 'Cash', status: { $ne: 'Cancelled' } }).sort({ paymentDate: 1 }).lean(),
+  ]);
+
+  let balance = openingBalance;
   let entries = [
-    { _id: 'ob1', date: new Date(range.$gte).toLocaleDateString('en-IN'), voucher: 'OB-001', particulars: 'Opening Balance', cashIn: balance, cashOut: null, balance },
-    ...sales.map(s => {
-      balance += s.totalAmt;
-      return { _id: s._id, date: new Date(s.invoiceDate).toLocaleDateString('en-IN'), voucher: s.invoiceNo, particulars: `Cash Sales - ${s.customerName}`, cashIn: s.totalAmt, cashOut: null, balance };
-    }),
-    { _id: 'cp1', date: new Date().toLocaleDateString('en-IN'), voucher: 'CP-001', particulars: 'Purchase Payment', cashIn: null, cashOut: 15100, balance: balance - 15100 },
-    { _id: 'cp2', date: new Date().toLocaleDateString('en-IN'), voucher: 'CP-002', particulars: 'Rent Payment',     cashIn: null, cashOut: 12000, balance: balance - 27100 },
+    { _id: 'ob1', date: new Date(range.$gte).toLocaleDateString('en-IN'), voucher: 'OB', particulars: 'Opening Balance', cashIn: balance, cashOut: null, balance, type: 'Opening' },
   ];
+
+  // Add cash sales
+  cashSales.forEach(s => {
+    balance += s.totalAmt;
+    entries.push({ 
+      _id: s._id, 
+      date: new Date(s.invoiceDate).toLocaleDateString('en-IN'), 
+      voucher: s.invoiceNo, 
+      particulars: `Cash Sales - ${s.customerName}`, 
+      cashIn: s.totalAmt, 
+      cashOut: null, 
+      balance,
+      type: 'Sale'
+    });
+  });
+
+  // Add receipts
+  receipts.forEach(r => {
+    balance += r.amount;
+    entries.push({
+      _id: r._id,
+      date: new Date(r.receiptDate).toLocaleDateString('en-IN'),
+      voucher: r.receiptNo,
+      particulars: r.particulars,
+      cashIn: r.amount,
+      cashOut: null,
+      balance,
+      type: 'Receipt'
+    });
+  });
+
+  // Add payments
+  payments.forEach(p => {
+    balance -= p.amount;
+    entries.push({
+      _id: p._id,
+      date: new Date(p.paymentDate).toLocaleDateString('en-IN'),
+      voucher: p.paymentNo,
+      particulars: p.particulars,
+      cashIn: null,
+      cashOut: p.amount,
+      balance,
+      type: 'Payment'
+    });
+  });
+
+  entries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (search) entries = entries.filter(e => e.voucher?.toLowerCase().includes(search.toLowerCase()) || e.particulars?.toLowerCase().includes(search.toLowerCase()));
 
-  const finalBalance = balance - 27100;
   const total        = entries.length;
   const skip         = (Number(page) - 1) * Number(limit);
   const paged        = entries.slice(skip, skip + Number(limit));
+  const finalBalance = balance;
 
   return res.status(200).json(new apiResponse(200, {
     entries:        paged,
-    openingBalance: 25280,
+    openingBalance,
     currentBalance: finalBalance,
     total,
     totalPages:     Math.ceil(total / Number(limit)),
@@ -100,29 +175,91 @@ export const getBankBook = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, search = '' } = req.query;
   const range = dateRange(from, to);
   const SaleInvoice = getSaleInvoiceModel(req.db);
+  const Receipt     = getReceiptModel(req.db);
+  const Payment     = getPaymentModel(req.db);
+  const OpeningBalance = getOpeningBalanceModel(req.db);
 
-  const onlineSales = await SaleInvoice.find({ invoiceDate: range, paymentMode: { $in: ['UPI','Card'] }, status: { $ne: 'Cancelled' } }).sort({ invoiceDate: 1 }).lean();
+  // Get current fiscal year opening balance
+  const currentFY = new Date().getFullYear();
+  const fyStart = `${currentFY}-${currentFY + 1}`;
+  const obData = await OpeningBalance.findOne({ fiscalYear: fyStart }).lean();
+  
+  // Calculate opening balance for Bank
+  let openingBalance = 0;
+  if (obData && obData.entries) {
+    const bankEntry = obData.entries.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('bank'));
+    openingBalance = bankEntry ? (bankEntry.openingDebit - bankEntry.openingCredit) : 0;
+  }
 
-  let balance = 1330480;
+  // Get bank transactions (UPI, Card, Cheque, NEFT, RTGS)
+  const [onlineSales, receipts, payments] = await Promise.all([
+    SaleInvoice.find({ invoiceDate: range, paymentMode: { $in: ['UPI','Card'] }, status: { $ne: 'Cancelled' } }).sort({ invoiceDate: 1 }).lean(),
+    Receipt.find({ receiptDate: range, mode: { $in: ['Bank', 'UPI', 'Cheque', 'Card', 'NEFT', 'RTGS'] }, status: { $ne: 'Cancelled' } }).sort({ receiptDate: 1 }).lean(),
+    Payment.find({ paymentDate: range, mode: { $in: ['Bank', 'UPI', 'Cheque', 'Card', 'NEFT', 'RTGS'] }, status: { $ne: 'Cancelled' } }).sort({ paymentDate: 1 }).lean(),
+  ]);
+
+  let balance = openingBalance;
   let entries = [
-    { _id: 'ob1', date: new Date(range.$gte).toLocaleDateString('en-IN'), voucher: 'OB-001', particulars: 'Opening Balance', deposit: balance, withdrawal: null, balance },
-    ...onlineSales.map(s => {
-      balance += s.totalAmt;
-      return { _id: s._id, date: new Date(s.invoiceDate).toLocaleDateString('en-IN'), voucher: s.invoiceNo, particulars: `Online Payment - ${s.paymentMode}`, deposit: s.totalAmt, withdrawal: null, balance };
-    }),
-    { _id: 'bp1', date: new Date().toLocaleDateString('en-IN'), voucher: 'BP-001', particulars: 'Supplier Payment', deposit: null, withdrawal: 49600, balance: balance - 49600 },
-    { _id: 'bp2', date: new Date().toLocaleDateString('en-IN'), voucher: 'BP-002', particulars: 'Rent Payment',     deposit: null, withdrawal: 50000, balance: balance - 99600 },
+    { _id: 'ob1', date: new Date(range.$gte).toLocaleDateString('en-IN'), voucher: 'OB', particulars: 'Opening Balance', deposit: balance, withdrawal: null, balance, type: 'Opening' },
   ];
+
+  // Add online sales
+  onlineSales.forEach(s => {
+    balance += s.totalAmt;
+    entries.push({
+      _id: s._id,
+      date: new Date(s.invoiceDate).toLocaleDateString('en-IN'),
+      voucher: s.invoiceNo,
+      particulars: `Online Payment - ${s.paymentMode}`,
+      deposit: s.totalAmt,
+      withdrawal: null,
+      balance,
+      type: 'Sale'
+    });
+  });
+
+  // Add receipts
+  receipts.forEach(r => {
+    balance += r.amount;
+    entries.push({
+      _id: r._id,
+      date: new Date(r.receiptDate).toLocaleDateString('en-IN'),
+      voucher: r.receiptNo,
+      particulars: `${r.mode} - ${r.particulars}`,
+      deposit: r.amount,
+      withdrawal: null,
+      balance,
+      type: 'Receipt'
+    });
+  });
+
+  // Add payments
+  payments.forEach(p => {
+    balance -= p.amount;
+    entries.push({
+      _id: p._id,
+      date: new Date(p.paymentDate).toLocaleDateString('en-IN'),
+      voucher: p.paymentNo,
+      particulars: `${p.mode} - ${p.particulars}`,
+      deposit: null,
+      withdrawal: p.amount,
+      balance,
+      type: 'Payment'
+    });
+  });
+
+  entries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (search) entries = entries.filter(e => e.voucher?.toLowerCase().includes(search.toLowerCase()) || e.particulars?.toLowerCase().includes(search.toLowerCase()));
 
-  const finalBalance = balance - 99600;
   const total        = entries.length;
   const skip         = (Number(page) - 1) * Number(limit);
   const paged        = entries.slice(skip, skip + Number(limit));
+  const finalBalance = balance;
 
   return res.status(200).json(new apiResponse(200, {
     entries:        paged,
+    openingBalance,
     currentBalance: finalBalance,
     total,
     totalPages:     Math.ceil(total / Number(limit)),
@@ -163,7 +300,32 @@ export const getReceipts = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/receipts
 export const createReceipt = asyncHandler(async (req, res) => {
-  return res.status(201).json(new apiResponse(201, req.body, 'Receipt created'));
+  const { receiptNo, receiptDate, particulars, amount, mode, partyName, customerId, reference, chequeNo, chequeDate, bankName, notes } = req.body;
+  
+  if (!receiptNo || !particulars || !amount || !mode) {
+    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  }
+
+  const Receipt = getReceiptModel(req.db);
+  
+  const receipt = new Receipt({
+    receiptNo,
+    receiptDate: receiptDate || new Date(),
+    particulars,
+    amount,
+    mode,
+    partyName: partyName || 'N/A',
+    customerId,
+    reference,
+    chequeNo: mode === 'Cheque' ? chequeNo : undefined,
+    chequeDate: mode === 'Cheque' ? chequeDate : undefined,
+    bankName: mode === 'Cheque' ? bankName : undefined,
+    notes,
+    status: 'Received',
+  });
+
+  await receipt.save();
+  return res.status(201).json(new apiResponse(201, receipt, 'Receipt created successfully'));
 });
 
 // ── GET /api/franchise/accounts/payments?from=&to=&page=&limit=&search=&mode=
@@ -171,42 +333,61 @@ export const getPayments = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, search = '', mode = '' } = req.query;
   const range = dateRange(from, to);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const Payment = getPaymentModel(req.db);
+  const Expense = getExpenseModel(req.db);
 
-  const filter = { billDate: range, paidAmt: { $gt: 0 } };
-  if (search) filter.$or = [{ billNo: new RegExp(search, 'i') }, { supplierName: new RegExp(search, 'i') }];
-  if (mode)   filter.paymentMode = mode;
+  const filter = { paymentDate: range, status: { $ne: 'Cancelled' } };
+  if (search) filter.$or = [{ paymentNo: new RegExp(search, 'i') }, { particulars: new RegExp(search, 'i') }];
+  if (mode)   filter.mode = mode;
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [invoices, total] = await Promise.all([
-    PurchaseInvoice.find(filter).sort({ billDate: -1 }).skip(skip).limit(Number(limit)).lean(),
-    PurchaseInvoice.countDocuments(filter),
+  
+  const [payments, purchasePayments, expenses, total] = await Promise.all([
+    Payment.find(filter).sort({ paymentDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    PurchaseInvoice.find({ billDate: range, paidAmt: { $gt: 0 } }).sort({ billDate: -1 }).lean(),
+    Expense.find(filter).sort({ expenseDate: -1 }).lean(),
+    Payment.countDocuments(filter),
   ]);
 
-  const STATIC = [
-    { _id: 's1', date: new Date().toLocaleDateString('en-IN'), voucher: 'PY-001', particulars: 'Rent',        partyName: '—', mode: 'Cash', amount: 12000 },
-    { _id: 's2', date: new Date().toLocaleDateString('en-IN'), voucher: 'PY-002', particulars: 'Staff Salary', partyName: '—', mode: 'Bank', amount: 38500 },
-    { _id: 's3', date: new Date().toLocaleDateString('en-IN'), voucher: 'PY-003', particulars: 'Electricity',  partyName: '—', mode: 'Cash', amount: 1280  },
-  ];
-
-  const payments = [
-    ...invoices.map(i => ({
-      _id:         i._id,
-      date:        new Date(i.billDate).toLocaleDateString('en-IN'),
-      voucher:     i.billNo,
-      particulars: `Supplier - ${i.supplierName}`,
-      partyName:   i.supplierName,
-      mode:        i.paymentMode,
-      amount:      i.paidAmt,
+  const allPayments = [
+    ...payments.map(p => ({
+      _id:         p._id,
+      date:        new Date(p.paymentDate).toLocaleDateString('en-IN'),
+      voucher:     p.paymentNo,
+      particulars: p.particulars,
+      partyName:   p.partyName,
+      mode:        p.mode,
+      amount:      p.amount,
+      type: 'Payment'
     })),
-    ...STATIC,
+    ...purchasePayments.map(p => ({
+      _id:         p._id,
+      date:        new Date(p.billDate).toLocaleDateString('en-IN'),
+      voucher:     p.billNo,
+      particulars: `Supplier - ${p.supplierName}`,
+      partyName:   p.supplierName,
+      mode:        p.paymentMode,
+      amount:      p.paidAmt,
+      type: 'Purchase'
+    })),
+    ...expenses.map(e => ({
+      _id:         e._id,
+      date:        new Date(e.expenseDate).toLocaleDateString('en-IN'),
+      voucher:     e.expenseNo,
+      particulars: e.particulars,
+      partyName:   e.vendor,
+      mode:        e.paymentMode,
+      amount:      e.amount,
+      type: 'Expense'
+    })),
   ];
 
-  const grandTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const grandTotal = allPayments.reduce((s, p) => s + (p.amount || 0), 0);
 
   return res.status(200).json(new apiResponse(200, {
-    payments,
-    total:       total + STATIC.length,
-    totalPages:  Math.ceil((total + STATIC.length) / Number(limit)),
+    payments: allPayments.slice(skip, skip + Number(limit)),
+    total:       total + purchasePayments.length + expenses.length,
+    totalPages:  Math.ceil((total + purchasePayments.length + expenses.length) / Number(limit)),
     currentPage: Number(page),
     grandTotal,
   }, 'Payments fetched'));
@@ -214,49 +395,65 @@ export const getPayments = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/payments
 export const createPayment = asyncHandler(async (req, res) => {
-  return res.status(201).json(new apiResponse(201, req.body, 'Payment created'));
+  const { paymentNo, paymentDate, particulars, amount, mode, partyName, supplierId, purchaseInvoiceId, reference, chequeNo, chequeDate, bankName, notes } = req.body;
+  
+  if (!paymentNo || !particulars || !amount || !mode) {
+    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  }
+
+  const Payment = getPaymentModel(req.db);
+  
+  const payment = new Payment({
+    paymentNo,
+    paymentDate: paymentDate || new Date(),
+    particulars,
+    amount,
+    mode,
+    partyName: partyName || 'N/A',
+    supplierId,
+    purchaseInvoiceId,
+    reference,
+    chequeNo: mode === 'Cheque' ? chequeNo : undefined,
+    chequeDate: mode === 'Cheque' ? chequeDate : undefined,
+    bankName: mode === 'Cheque' ? bankName : undefined,
+    notes,
+    status: 'Paid',
+  });
+
+  await payment.save();
+  return res.status(201).json(new apiResponse(201, payment, 'Payment created successfully'));
 });
 
 // ── GET /api/franchise/accounts/expenses?from=&to=&category=&page=&limit=&search=
 export const getExpenses = asyncHandler(async (req, res) => {
   const { from, to, category = '', page = 1, limit = 20, search = '' } = req.query;
+  const range = dateRange(from, to);
+  const Expense = getExpenseModel(req.db);
 
-  const BASE_EXPENSES = [
-    { _id: 'e1', date: new Date().toLocaleDateString('en-IN'),                             particulars: 'Rent',            amount: 12000, category: 'Rent',      paymentMode: 'Cash' },
-    { _id: 'e2', date: new Date(Date.now()-1*86400000).toLocaleDateString('en-IN'),        particulars: 'Staff Salary',    amount: 38500, category: 'Salary',    paymentMode: 'Bank' },
-    { _id: 'e3', date: new Date(Date.now()-2*86400000).toLocaleDateString('en-IN'),        particulars: 'Electricity Bill',amount: 1280,  category: 'Utilities', paymentMode: 'Cash' },
-    { _id: 'e4', date: new Date(Date.now()-3*86400000).toLocaleDateString('en-IN'),        particulars: 'Transport',       amount: 800,   category: 'Transport', paymentMode: 'Cash' },
-    { _id: 'e5', date: new Date(Date.now()-4*86400000).toLocaleDateString('en-IN'),        particulars: 'Telephone Bill',  amount: 1100,  category: 'Utilities', paymentMode: 'UPI'  },
-    { _id: 'e6', date: new Date(Date.now()-5*86400000).toLocaleDateString('en-IN'),        particulars: 'Stationery',      amount: 430,   category: 'Office',    paymentMode: 'Cash' },
-    { _id: 'e7', date: new Date(Date.now()-6*86400000).toLocaleDateString('en-IN'),        particulars: 'Miscellaneous',   amount: 9110,  category: 'Other',     paymentMode: 'Cash' },
-    { _id: 'e8', date: new Date(Date.now()-8*86400000).toLocaleDateString('en-IN'),        particulars: 'Office Supplies', amount: 650,   category: 'Office',    paymentMode: 'Cash' },
-    { _id: 'e9', date: new Date(Date.now()-10*86400000).toLocaleDateString('en-IN'),       particulars: 'Marketing',       amount: 3200,  category: 'Marketing', paymentMode: 'Bank' },
-    { _id:'e10', date: new Date(Date.now()-12*86400000).toLocaleDateString('en-IN'),       particulars: 'Maintenance',     amount: 1800,  category: 'Maintenance',paymentMode: 'Cash' },
-    { _id:'e11', date: new Date(Date.now()-15*86400000).toLocaleDateString('en-IN'),       particulars: 'Internet Bill',   amount: 999,   category: 'Utilities', paymentMode: 'UPI'  },
-    { _id:'e12', date: new Date(Date.now()-18*86400000).toLocaleDateString('en-IN'),       particulars: 'Staff Salary',    amount: 38500, category: 'Salary',    paymentMode: 'Bank' },
-  ];
+  const filter = { expenseDate: range, status: { $ne: 'Cancelled' } };
+  if (search) filter.$or = [{ particulars: new RegExp(search, 'i') }, { vendor: new RegExp(search, 'i') }];
+  if (category) filter.category = category;
 
-  let filtered = BASE_EXPENSES;
-  if (category) filtered = filtered.filter(e => e.category === category);
-  if (search)   filtered = filtered.filter(e => e.particulars.toLowerCase().includes(search.toLowerCase()));
+  const skip = (Number(page) - 1) * Number(limit);
+  const [expenses, total] = await Promise.all([
+    Expense.find(filter).sort({ expenseDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    Expense.countDocuments(filter),
+  ]);
 
-  // Date range filter
-  if (from || to) {
-    filtered = filtered.filter(e => {
-      const d = new Date(e.date.split('/').reverse().join('-'));
-      if (from && d < new Date(from)) return false;
-      if (to   && d > new Date(to))   return false;
-      return true;
-    });
-  }
+  const formattedExpenses = expenses.map(e => ({
+    _id:    e._id,
+    date:   new Date(e.expenseDate).toLocaleDateString('en-IN'),
+    particulars: e.particulars,
+    amount: e.amount,
+    category: e.category,
+    paymentMode: e.paymentMode,
+    vendor: e.vendor,
+  }));
 
-  const total      = filtered.length;
-  const skip       = (Number(page) - 1) * Number(limit);
-  const paged      = filtered.slice(skip, skip + Number(limit));
-  const grandTotal = filtered.reduce((s, e) => s + e.amount, 0);
+  const grandTotal = formattedExpenses.reduce((s, e) => s + e.amount, 0);
 
   return res.status(200).json(new apiResponse(200, {
-    expenses:    paged,
+    expenses: formattedExpenses,
     total,
     totalPages:  Math.ceil(total / Number(limit)),
     currentPage: Number(page),
@@ -266,39 +463,60 @@ export const getExpenses = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/expenses
 export const createExpense = asyncHandler(async (req, res) => {
-  return res.status(201).json(new apiResponse(201, req.body, 'Expense added'));
+  const { expenseNo, expenseDate, particulars, amount, category, paymentMode, vendor, vendorId, reference, billNo, notes } = req.body;
+  
+  if (!expenseNo || !particulars || !amount || !category) {
+    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  }
+
+  const Expense = getExpenseModel(req.db);
+  
+  const expense = new Expense({
+    expenseNo,
+    expenseDate: expenseDate || new Date(),
+    particulars,
+    amount,
+    category,
+    paymentMode: paymentMode || 'Cash',
+    vendor: vendor || 'N/A',
+    vendorId,
+    reference,
+    billNo,
+    notes,
+    status: 'Recorded',
+  });
+
+  await expense.save();
+  return res.status(201).json(new apiResponse(201, expense, 'Expense added successfully'));
 });
 
 // ── GET /api/franchise/accounts/income?from=&to=&page=&limit=&category=
 export const getIncome = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, category = '' } = req.query;
+  const range = dateRange(from, to);
+  const SaleInvoice = getSaleInvoiceModel(req.db);
 
-  const BASE_INCOME = [
-    { _id: 'i1', date: new Date().toLocaleDateString('en-IN'),                       particulars: 'Sales Income',      amount: 585320, category: 'Sales'    },
-    { _id: 'i2', date: new Date(Date.now()-2*86400000).toLocaleDateString('en-IN'), particulars: 'Other Income',      amount: 15970,  category: 'Other'    },
-    { _id: 'i3', date: new Date(Date.now()-5*86400000).toLocaleDateString('en-IN'), particulars: 'Discount Received', amount: 12540,  category: 'Discount' },
-    { _id: 'i4', date: new Date(Date.now()-7*86400000).toLocaleDateString('en-IN'), particulars: 'Interest Received', amount: 6340,   category: 'Interest' },
-    { _id: 'i5', date: new Date(Date.now()-10*86400000).toLocaleDateString('en-IN'),particulars: 'Sales Income',      amount: 412800, category: 'Sales'    },
-    { _id: 'i6', date: new Date(Date.now()-15*86400000).toLocaleDateString('en-IN'),particulars: 'Commission Income', amount: 8200,   category: 'Other'    },
-  ];
+  // Get all sales as income
+  const filter = { invoiceDate: range, status: { $ne: 'Cancelled' } };
+  const skip = (Number(page) - 1) * Number(limit);
+  
+  const [sales, total] = await Promise.all([
+    SaleInvoice.find(filter).sort({ invoiceDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    SaleInvoice.countDocuments(filter),
+  ]);
 
-  let filtered = category ? BASE_INCOME.filter(i => i.category === category) : BASE_INCOME;
-  if (from || to) {
-    filtered = filtered.filter(e => {
-      const d = new Date(e.date.split('/').reverse().join('-'));
-      if (from && d < new Date(from)) return false;
-      if (to   && d > new Date(to))   return false;
-      return true;
-    });
-  }
+  const incomeEntries = sales.map(s => ({
+    _id:         s._id,
+    date:        new Date(s.invoiceDate).toLocaleDateString('en-IN'),
+    particulars: `Sales Income - ${s.customerName}`,
+    amount:      s.totalAmt,
+    category:    'Sales',
+  }));
 
-  const total      = filtered.length;
-  const skip       = (Number(page) - 1) * Number(limit);
-  const paged      = filtered.slice(skip, skip + Number(limit));
-  const grandTotal = filtered.reduce((s, i) => s + i.amount, 0);
+  const grandTotal = incomeEntries.reduce((s, i) => s + i.amount, 0);
 
   return res.status(200).json(new apiResponse(200, {
-    income:      paged,
+    income:      incomeEntries,
     total,
     totalPages:  Math.ceil(total / Number(limit)),
     currentPage: Number(page),
@@ -314,33 +532,27 @@ export const createIncome = asyncHandler(async (req, res) => {
 // ── GET /api/franchise/accounts/journal?from=&to=&page=&limit=&search=
 export const getJournal = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, search = '' } = req.query;
+  const range = dateRange(from, to);
+  const JournalEntry = getJournalEntryModel(req.db);
 
-  const BASE_JOURNAL = [
-    { _id: 'j1', date: new Date().toLocaleDateString('en-IN'),                       jvNo: 'JV-2025-001', particulars: 'Depreciation',      debit: 2500,  credit: 2500  },
-    { _id: 'j2', date: new Date(Date.now()-2*86400000).toLocaleDateString('en-IN'), jvNo: 'JV-2025-002', particulars: 'Interest Accrued',  debit: 1100,  credit: 1100  },
-    { _id: 'j3', date: new Date(Date.now()-5*86400000).toLocaleDateString('en-IN'), jvNo: 'JV-2025-003', particulars: 'Stock Adjustment',  debit: 3460,  credit: 3460  },
-    { _id: 'j4', date: new Date(Date.now()-8*86400000).toLocaleDateString('en-IN'), jvNo: 'JV-2025-004', particulars: 'Advance Adjustment',debit: 5000,  credit: 5000  },
-    { _id: 'j5', date: new Date(Date.now()-12*86400000).toLocaleDateString('en-IN'),jvNo: 'JV-2025-005', particulars: 'Bank Charges',      debit: 250,   credit: 250   },
-    { _id: 'j6', date: new Date(Date.now()-15*86400000).toLocaleDateString('en-IN'),jvNo: 'JV-2025-006', particulars: 'Closing Entry',     debit: 45000, credit: 45000 },
-  ];
+  const filter = { entryDate: range, status: 'Posted' };
+  if (search) filter.$or = [{ jvNo: new RegExp(search, 'i') }, { narration: new RegExp(search, 'i') }];
 
-  let filtered = BASE_JOURNAL;
-  if (search)   filtered = filtered.filter(e => e.particulars.toLowerCase().includes(search.toLowerCase()) || e.jvNo.toLowerCase().includes(search.toLowerCase()));
-  if (from || to) {
-    filtered = filtered.filter(e => {
-      const d = new Date(e.date.split('/').reverse().join('-'));
-      if (from && d < new Date(from)) return false;
-      if (to   && d > new Date(to))   return false;
-      return true;
-    });
-  }
-
-  const total = filtered.length;
-  const skip  = (Number(page) - 1) * Number(limit);
-  const paged = filtered.slice(skip, skip + Number(limit));
+  const skip = (Number(page) - 1) * Number(limit);
+  const [entries, total] = await Promise.all([
+    JournalEntry.find(filter).sort({ entryDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+    JournalEntry.countDocuments(filter),
+  ]);
 
   return res.status(200).json(new apiResponse(200, {
-    entries:     paged,
+    entries: entries.map(e => ({
+      _id:         e._id,
+      date:        new Date(e.entryDate).toLocaleDateString('en-IN'),
+      jvNo:        e.jvNo,
+      particulars: e.narration,
+      debit:       e.totalDebit,
+      credit:      e.totalCredit,
+    })),
     total,
     totalPages:  Math.ceil(total / Number(limit)),
     currentPage: Number(page),
@@ -349,44 +561,121 @@ export const getJournal = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/journal
 export const createJournalEntry = asyncHandler(async (req, res) => {
-  return res.status(201).json(new apiResponse(201, req.body, 'Journal entry created'));
+  const { jvNo, entryDate, narration, lines } = req.body;
+
+  if (!jvNo || !narration || !lines || lines.length < 2) {
+    return res.status(400).json(new apiResponse(400, null, 'Invalid journal entry. Minimum 2 lines required'));
+  }
+
+  // Verify debit = credit
+  const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
+  const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+
+  if (Math.abs(totalDebit - totalCredit) > 0.01) {
+    return res.status(400).json(new apiResponse(400, null, `Debit (${totalDebit}) must equal Credit (${totalCredit})`));
+  }
+
+  const JournalEntry = getJournalEntryModel(req.db);
+  const AccountMaster = getAccountMasterModel(req.db);
+
+  // Verify all accounts exist
+  const accountNames = lines.map(l => l.accountName);
+  const accounts = await AccountMaster.find({ accountName: { $in: accountNames } }).lean();
+
+  if (accounts.length !== lines.length) {
+    return res.status(400).json(new apiResponse(400, null, 'One or more accounts not found in Account Master'));
+  }
+
+  const entry = new JournalEntry({
+    jvNo,
+    entryDate: entryDate || new Date(),
+    narration,
+    lines: lines.map((l, i) => ({
+      accountId: accounts[i]._id,
+      accountName: l.accountName,
+      accountType: accounts[i].accountType,
+      debit: l.debit || 0,
+      credit: l.credit || 0,
+      narration: l.narration,
+    })),
+    totalDebit,
+    totalCredit,
+    status: 'Posted',
+  });
+
+  await entry.save();
+  return res.status(201).json(new apiResponse(201, entry, 'Journal entry created successfully'));
 });
 
 // ── GET /api/franchise/accounts/ledger?account=&from=&to=&page=&limit=
 export const getLedger = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, account = '', from = '', to = '' } = req.query;
+  const range = dateRange(from, to);
+  const JournalEntry = getJournalEntryModel(req.db);
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
 
-  const BASE_LEDGER = [
-    { _id: 'l1', date: new Date(new Date().getFullYear(), 3, 1).toLocaleDateString('en-IN'), particular: 'Opening Balance', debit: null,  credit: 12400, balance: 12400  },
-    { _id: 'l2', date: new Date(Date.now()-10*86400000).toLocaleDateString('en-IN'),          particular: 'Payment Received', debit: null,  credit: 8000,  balance: 20400  },
-    { _id: 'l3', date: new Date(Date.now()-8*86400000).toLocaleDateString('en-IN'),           particular: 'Expense Entry',    debit: 3200,  credit: null,  balance: 17200  },
-    { _id: 'l4', date: new Date(Date.now()-5*86400000).toLocaleDateString('en-IN'),           particular: 'Sales Invoice',    debit: 6000,  credit: null,  balance: 11200  },
-    { _id: 'l5', date: new Date(Date.now()-3*86400000).toLocaleDateString('en-IN'),           particular: 'Sales Invoice',    debit: null,  credit: 9000,  balance: 20200  },
-    { _id: 'l6', date: new Date(Date.now()-2*86400000).toLocaleDateString('en-IN'),           particular: 'Bank Transfer',    debit: 5000,  credit: null,  balance: 15200  },
-    { _id: 'l7', date: new Date().toLocaleDateString('en-IN'),                                particular: 'Payment Received', debit: 7460,  credit: null,  balance: 7740   },
-  ];
+  let entries = [];
 
-  let filtered = BASE_LEDGER;
-  if (account) filtered = filtered.filter(e => e.particular.toLowerCase().includes(account.toLowerCase()));
-  if (from || to) {
-    filtered = filtered.filter(e => {
-      const d = new Date(e.date.split('/').reverse().join('-'));
-      if (from && d < new Date(from)) return false;
-      if (to   && d > new Date(to))   return false;
-      return true;
-    });
+  // Get journal entries for this account
+  if (account) {
+    const journals = await JournalEntry.find({ 
+      'lines.accountName': account,
+      entryDate: range,
+      status: 'Posted'
+    }).lean();
+
+    entries.push(...journals.flatMap(j => j.lines.filter(l => l.accountName === account).map(l => ({
+      _id: j._id,
+      date: new Date(j.entryDate).toLocaleDateString('en-IN'),
+      particular: `Journal - ${j.narration}`,
+      debit: l.debit,
+      credit: l.credit,
+    }))));
   }
 
-  const total          = filtered.length;
-  const skip           = (Number(page) - 1) * Number(limit);
-  const paged          = filtered.slice(skip, skip + Number(limit));
-  const closingBalance = filtered.length > 0 ? filtered[filtered.length - 1].balance : 0;
+  // Get sales/purchases for account
+  if (!account || account.toLowerCase().includes('debtors')) {
+    const sales = await SaleInvoice.find({ invoiceDate: range, status: { $ne: 'Cancelled' } }).lean();
+    entries.push(...sales.map(s => ({
+      _id: s._id,
+      date: new Date(s.invoiceDate).toLocaleDateString('en-IN'),
+      particular: `Sales - ${s.customerName}`,
+      debit: s.dueAmt > 0 ? s.dueAmt : null,
+      credit: s.totalAmt,
+    })));
+  }
+
+  if (!account || account.toLowerCase().includes('creditors')) {
+    const purchases = await PurchaseInvoice.find({ billDate: range, status: { $ne: 'Cancelled' } }).lean();
+    entries.push(...purchases.map(p => ({
+      _id: p._id,
+      date: new Date(p.billDate).toLocaleDateString('en-IN'),
+      particular: `Purchase - ${p.supplierName}`,
+      debit: p.totalAmt,
+      credit: p.dueAmt > 0 ? p.dueAmt : null,
+    })));
+  }
+
+  entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Calculate running balance
+  let balance = 0;
+  entries = entries.map(e => {
+    balance += (e.debit || 0) - (e.credit || 0);
+    return { ...e, balance };
+  });
+
+  const total = entries.length;
+  const skip  = (Number(page) - 1) * Number(limit);
+  const paged = entries.slice(skip, skip + Number(limit));
+  const closingBalance = entries.length > 0 ? entries[entries.length - 1].balance : 0;
 
   return res.status(200).json(new apiResponse(200, {
-    entries:        paged,
+    entries: paged,
     total,
-    totalPages:     Math.ceil(total / Number(limit)),
-    currentPage:    Number(page),
+    totalPages: Math.ceil(total / Number(limit)),
+    currentPage: Number(page),
     closingBalance,
   }, 'Ledger fetched'));
 });
@@ -395,29 +684,58 @@ export const getLedger = asyncHandler(async (req, res) => {
 export const getTrialBalance = asyncHandler(async (req, res) => {
   const SaleInvoice    = getSaleInvoiceModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const JournalEntry = getJournalEntryModel(req.db);
+  const Expense = getExpenseModel(req.db);
+  const OpeningBalance = getOpeningBalanceModel(req.db);
 
-  const [salesTotal, purchaseTotal] = await Promise.all([
-    SaleInvoice.aggregate([{ $match: { status: { $ne: 'Cancelled' } } }, { $group: { _id: null, t: { $sum: '$totalAmt' } } }]),
-    PurchaseInvoice.aggregate([{ $match: { status: { $ne: 'Cancelled' } } }, { $group: { _id: null, t: { $sum: '$totalAmt' } } }]),
-  ]);
+  const currentFY = new Date().getFullYear();
+  const fyStart = `${currentFY}-${currentFY + 1}`;
+  const obData = await OpeningBalance.findOne({ fiscalYear: fyStart }).lean();
 
-  const salesAmt    = salesTotal[0]?.t    || 1356830;
-  const purchaseAmt = purchaseTotal[0]?.t || 1364230;
+  // Start with opening balances
+  const trialBalance = {};
+  if (obData && obData.entries) {
+    obData.entries.forEach(e => {
+      trialBalance[e.accountName] = {
+        accountType: e.accountType,
+        debit: e.openingDebit || 0,
+        credit: e.openingCredit || 0,
+      };
+    });
+  }
 
-  const TB = [
-    { particulars: 'Cash in Hand',     debit: 41960,      credit: null        },
-    { particulars: 'Bank Account',     debit: 217840,     credit: null        },
-    { particulars: 'Stock in Hand',    debit: 335680,     credit: null        },
-    { particulars: 'Debtors',          debit: 145230,     credit: null        },
-    { particulars: 'Furniture',        debit: 55800,      credit: null        },
-    { particulars: 'Creditors',        debit: null,       credit: 129430      },
-    { particulars: 'Capital Account',  debit: null,       credit: 4951000     },
-    { particulars: 'Purchase Account', debit: purchaseAmt,credit: null        },
-    { particulars: 'Sales Account',    debit: null,       credit: salesAmt    },
-    { particulars: 'Salary Expense',   debit: 88000,      credit: null        },
-    { particulars: 'Rent Expense',     debit: 36000,      credit: null        },
-    { particulars: 'Other Expenses',   debit: 10430,      credit: null        },
-  ];
+  // Add sales
+  const sales = await SaleInvoice.find({ status: { $ne: 'Cancelled' } }).lean();
+  const totalSales = sales.reduce((s, inv) => s + inv.totalAmt, 0);
+  trialBalance['Sales Account'] = { accountType: 'Revenue', debit: 0, credit: totalSales };
+
+  // Add purchases
+  const purchases = await PurchaseInvoice.find({ status: { $ne: 'Cancelled' } }).lean();
+  const totalPurchases = purchases.reduce((s, inv) => s + inv.totalAmt, 0);
+  trialBalance['Purchase Account'] = { accountType: 'Expense', debit: totalPurchases, credit: 0 };
+
+  // Add expenses
+  const expenses = await Expense.find().lean();
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  trialBalance['Expense Account'] = { accountType: 'Expense', debit: totalExpenses, credit: 0 };
+
+  // Add journal entries
+  const journals = await JournalEntry.find({ status: 'Posted' }).lean();
+  journals.forEach(j => {
+    j.lines.forEach(l => {
+      if (!trialBalance[l.accountName]) {
+        trialBalance[l.accountName] = { accountType: l.accountType, debit: 0, credit: 0 };
+      }
+      trialBalance[l.accountName].debit += l.debit;
+      trialBalance[l.accountName].credit += l.credit;
+    });
+  });
+
+  const TB = Object.entries(trialBalance).map(([name, data]) => ({
+    particulars: name,
+    debit: data.debit,
+    credit: data.credit,
+  }));
 
   const totalDebit  = TB.reduce((s, r) => s + (r.debit  || 0), 0);
   const totalCredit = TB.reduce((s, r) => s + (r.credit || 0), 0);
@@ -431,63 +749,90 @@ export const getProfitLoss = asyncHandler(async (req, res) => {
   const range = dateRange(from, to);
   const SaleInvoice    = getSaleInvoiceModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const Expense = getExpenseModel(req.db);
 
-  const [salesAgg, purchAgg] = await Promise.all([
+  const [salesAgg, purchAgg, expenseAgg] = await Promise.all([
     SaleInvoice.aggregate([{ $match: { invoiceDate: range, status: { $ne: 'Cancelled' } } }, { $group: { _id: null, t: { $sum: '$totalAmt' } } }]),
     PurchaseInvoice.aggregate([{ $match: { billDate: range, status: { $ne: 'Cancelled' } } }, { $group: { _id: null, t: { $sum: '$totalAmt' } } }]),
+    Expense.aggregate([{ $match: { expenseDate: range } }, { $group: { _id: null, t: { $sum: '$amount' } } }]),
   ]);
 
-  const salesAmt  = salesAgg[0]?.t  || 585320;
-  const purchAmt  = purchAgg[0]?.t  || 490000;
-  const expenses  = 63110;
+  const salesAmt  = salesAgg[0]?.t  || 0;
+  const purchAmt  = purchAgg[0]?.t  || 0;
+  const expenses  = expenseAgg[0]?.t || 0;
+  
   const grossProfit = salesAmt - purchAmt;
   const netProfit   = grossProfit - expenses;
 
   return res.status(200).json(new apiResponse(200, {
     income: [
-      { label: 'Sales Income',      amount: salesAmt },
-      { label: 'Other Income',      amount: 15970 },
+      { label: 'Sales Income', amount: salesAmt },
     ],
     expenses: [
-      { label: 'Cost of Goods Sold',amount: purchAmt },
-      { label: 'Salary',            amount: 38500 },
-      { label: 'Rent',              amount: 12000 },
-      { label: 'Utilities',         amount: 2380 },
-      { label: 'Other Expenses',    amount: 10230 },
+      { label: 'Cost of Goods Sold', amount: purchAmt },
+      { label: 'Operating Expenses', amount: expenses },
     ],
-    grossProfit, netProfit,
-    totalIncome: salesAmt + 15970,
+    grossProfit,
+    netProfit,
+    totalIncome: salesAmt,
     totalExpenses: purchAmt + expenses,
   }, 'P&L fetched'));
 });
 
 // ── GET /api/franchise/accounts/balance-sheet?date=
 export const getBalanceSheet = asyncHandler(async (req, res) => {
+  const SaleInvoice = getSaleInvoiceModel(req.db);
+  const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
+  const Expense = getExpenseModel(req.db);
+  const OpeningBalance = getOpeningBalanceModel(req.db);
+
+  const currentFY = new Date().getFullYear();
+  const fyStart = `${currentFY}-${currentFY + 1}`;
+  const obData = await OpeningBalance.findOne({ fiscalYear: fyStart }).lean();
+
+  // Get totals
+  const sales = await SaleInvoice.aggregate([{ $group: { _id: null, t: { $sum: '$totalAmt' }, outstanding: { $sum: '$dueAmt' } } }]);
+  const purchases = await PurchaseInvoice.aggregate([{ $group: { _id: null, t: { $sum: '$totalAmt' }, outstanding: { $sum: '$dueAmt' } } }]);
+  const expenses = await Expense.aggregate([{ $group: { _id: null, t: { $sum: '$amount' } } }]);
+
+  const salesAmt = sales[0]?.t || 0;
+  const purchAmt = purchases[0]?.t || 0;
+  const expenseAmt = expenses[0]?.t || 0;
+  const netProfit = salesAmt - purchAmt - expenseAmt;
+
+  const currentAssets = (obData?.entries?.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('cash'))?.openingDebit || 50000) + 
+                        (obData?.entries?.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('bank'))?.openingDebit || 200000) +
+                        (sales[0]?.outstanding || 0);
+  
+  const fixedAssets = obData?.entries?.find(e => e.accountType === 'Asset' && !e.accountName.toLowerCase().includes('cash') && !e.accountName.toLowerCase().includes('bank'))?.openingDebit || 100000;
+  
+  const currentLiabilities = purchases[0]?.outstanding || 0;
+  const capital = obData?.entries?.find(e => e.accountType === 'Equity')?.openingDebit || 500000;
+
+  const totalAssets = currentAssets + fixedAssets;
+  const totalLiabilities = currentLiabilities + capital + netProfit;
+
   return res.status(200).json(new apiResponse(200, {
     assets: {
       currentAssets: [
-        { label: 'Cash in Hand',    amount: 41960  },
-        { label: 'Bank Balance',    amount: 217840 },
-        { label: 'Stock in Hand',   amount: 335680 },
-        { label: 'Debtors',         amount: 145230 },
-        { label: 'Advance Payments',amount: 25000  },
+        { label: 'Cash in Hand', amount: 50000 },
+        { label: 'Bank Balance', amount: 200000 },
+        { label: 'Debtors', amount: sales[0]?.outstanding || 0 },
       ],
       fixedAssets: [
-        { label: 'Furniture',       amount: 55800  },
-        { label: 'Equipment',       amount: 28000  },
+        { label: 'Furniture & Fixtures', amount: 100000 },
       ],
     },
     liabilities: {
       currentLiabilities: [
-        { label: 'Creditors',       amount: 129430 },
-        { label: 'Outstanding Expenses', amount: 18500 },
+        { label: 'Creditors', amount: purchases[0]?.outstanding || 0 },
       ],
       capital: [
-        { label: 'Capital Account', amount: 700000 },
-        { label: 'Net Profit',      amount: 51780  },
+        { label: 'Capital Account', amount: capital },
+        { label: 'Net Profit', amount: netProfit },
       ],
     },
-    totalAssets:      849510,
-    totalLiabilities: 849510,
+    totalAssets,
+    totalLiabilities,
   }, 'Balance sheet fetched'));
 });

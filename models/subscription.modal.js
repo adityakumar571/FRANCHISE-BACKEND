@@ -1,79 +1,61 @@
 import mongoose from "mongoose";
 
-const PlanSchema = new mongoose.Schema(
-    {
-        name: {
-            type: String,
-            required: true,
-        },
-
-        planType: {
-            type: String,
-            enum: ["Plan", "Addon"],
-            default: "Plan",
-            required: true,
-        },
-
-        description: String,
-
-        // Fixed price
-        price: {
-            type: Number,
-            default: 0,
-        },
-
-        billingCycle: {
-            type: String,
-            enum: ["Monthly", "Yearly"],
-            default: "Monthly",
-        },
-
-        // ── School Size Target ──────────────────────────────────
-        // Just for display / filtering on pricing page
-        targetSize: {
-            type: String,
-            enum: ["Small", "Medium", "Large", "Enterprise", "Any"],
-            default: "Any",
-        },
-
-        // ── One-Time Setup Fee ──────────────────────────────────
-        setupFee: {
-            type: Number,
-            default: 0,
-        },
-
-        // ── Trial ───────────────────────────────────────────────
-        trialDays: {
-            type: Number,
-            default: 0,           // 0 = no trial
-        },
-
-        // ── Yearly Discount ─────────────────────────────────────
-        yearlyDiscountPercent: {
-            type: Number,
-            default: 0,           // e.g. 15 means 15% off yearly
-        },
-
-        // ── Display ─────────────────────────────────────────────
-        features: [String],
-
-        isPopular: {
-            type: Boolean,
-            default: false,
-        },
-
-        sortOrder: {
-            type: Number,
-            default: 0,
-        },
-
-        isActive: {
-            type: Boolean,
-            default: true,
-        },
+const SubscriptionPlanSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
-    { timestamps: true }
+    planType: {
+      type: String,
+      default: "Plan",
+    },
+    description: {
+      type: String,
+    },
+    price: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    billingCycle: {
+      type: String,
+      enum: ["Monthly", "Yearly", "Quarterly", "Half-Yearly"],
+      default: "Monthly",
+    },
+    trialDays: {
+      type: Number,
+      default: 0,
+    },
+    features: [
+      {
+        type: String,
+      },
+    ],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    pricingModel: {
+      type: String,
+      enum: ["FIXED", "VARIABLE"],
+      default: "FIXED",
+    },
+    pricePerStudent: {
+      type: Number,
+    },
+    minStudents: {
+      type: Number,
+    },
+  },
+  {
+    timestamps: true,
+  }
 );
 
-export default mongoose.model("SubscriptionPlan", PlanSchema);
+const SubscriptionPlan =
+  mongoose.models.SubscriptionPlan ||
+  mongoose.model("SubscriptionPlan", SubscriptionPlanSchema);
 
+export default SubscriptionPlan;

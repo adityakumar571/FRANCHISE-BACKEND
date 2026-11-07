@@ -193,20 +193,23 @@ const tenantSchema = new mongoose.Schema(
 );
 
 // Hash password before save — sirf tab jab portalPassword actually change hua ho
-tenantSchema.pre("save", async function (next) {
-    if (!this.isModified("portalPassword")) return next();
-    if (!this.portalPassword) return next();
-    try {
-        this.portalPassword = await bcrypt.hash(this.portalPassword, 10);
-    } catch (err) {
-        return next(err);
-    }
-    next();
-});
+// DISABLED: Password hashing is temporarily disabled for development
+// tenantSchema.pre("save", async function (next) {
+//     if (!this.isModified("portalPassword")) return next();
+//     if (!this.portalPassword) return next();
+//     try {
+//         this.portalPassword = await bcrypt.hash(this.portalPassword, 10);
+//     } catch (err) {
+//         return next(err);
+//     }
+//     next();
+// });
 
 tenantSchema.methods.isPasswordCorrect = async function (password) {
     if (!this.portalPassword) return false;
-    return bcrypt.compare(password, this.portalPassword);
+    // DISABLED: Plain text comparison for development
+    return password === this.portalPassword;
+    // return bcrypt.compare(password, this.portalPassword);
 };
 
 export default mongoose.models.Tenant || mongoose.model("Tenant", tenantSchema);

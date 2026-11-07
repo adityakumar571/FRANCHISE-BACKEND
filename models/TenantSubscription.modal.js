@@ -59,7 +59,7 @@ const TenantSubscriptionSchema = new mongoose.Schema(
         usedTrialPackageIds: [
             {
                 type: mongoose.Schema.Types.ObjectId,
-                ref:  "FreeTrialPackage",
+                ref: "FreeTrialPackage",
             },
         ],
 
