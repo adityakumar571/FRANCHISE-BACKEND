@@ -105,6 +105,11 @@ export const loginUser = asyncHandler(async (req, res) => {
     // ===============================
     // 🔐 PASSWORD CHECK
     // ===============================
+    console.log("🔐 PASSWORD DEBUG:");
+    console.log("  Received password:", password);
+    console.log("  Stored password:", user.password);
+    console.log("  Match:", password === user.password);
+    
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {

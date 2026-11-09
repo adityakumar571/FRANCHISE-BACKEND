@@ -62,25 +62,22 @@ const UserSchema = new mongoose.Schema(
 );
 
 // 🔐 HASH PASSWORD BEFORE SAVING
-// DISABLED: Password hashing is temporarily disabled for development
-// UserSchema.pre("save", async function (next) {
-//     // Only hash if password is modified or new
-//     if (!this.isModified("password")) return next();
-//     
-//     try {
-//         const salt = await bcrypt.genSalt(10);
-//         this.password = await bcrypt.hash(this.password, salt);
-//         next();
-//     } catch (error) {
-//         next(error);
-//     }
-// });
+UserSchema.pre("save", async function (next) {
+    // Only hash if password is modified or new
+    if (!this.isModified("password")) return next();
+    
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 
 // 🔐 COMPARE PASSWORD METHOD
 UserSchema.methods.comparePassword = async function (candidatePassword) {
-    // DISABLED: Plain text comparison for development
-    return candidatePassword === this.password;
-    // return await bcrypt.compare(candidatePassword, this.password);
+    return await bcrypt.compare(candidatePassword, this.password);
 };
 
 UserSchema.methods.generateAuthToken = function () {
