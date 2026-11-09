@@ -7,20 +7,10 @@ import { getSaleInvoiceModel } from '../../../models/tenant/franchise/SaleInvoic
 import { getPurchaseInvoiceModel } from '../../../models/tenant/franchise/PurchaseInvoice.model.js';
 
 // ────────────────────────────────────────────────────────────────────────────
-// Seed dummy data if collections are empty (development helper)
-// ⚠️ DISABLED FOR PRODUCTION - Only for development/testing
-// ────────────────────────────────────────────────────────────────────────────
-const seedDummyData = async (db) => {
-  // ❌ SEEDING DISABLED - Franchises start with empty database
-  return;
-};
-
-// ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/dashboard/summary
 // Returns KPI cards data for today
 // ────────────────────────────────────────────────────────────────────────────
 export const getDashboardSummary = asyncHandler(async (req, res) => {
-  await seedDummyData(req.db);
 
   const SaleInvoice = getSaleInvoiceModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);

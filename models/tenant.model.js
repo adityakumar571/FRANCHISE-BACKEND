@@ -118,16 +118,16 @@ const tenantSchema = new mongoose.Schema(
 
         // Contact Persons
         contactPerson1: {
-            name:        { type: String },
+            name: { type: String },
             designation: { type: String },
-            contactNo:   { type: String },
-            email:       { type: String },
+            contactNo: { type: String },
+            email: { type: String },
         },
         contactPerson2: {
-            name:        { type: String },
+            name: { type: String },
             designation: { type: String },
-            contactNo:   { type: String },
-            email:       { type: String },
+            contactNo: { type: String },
+            email: { type: String },
         },
 
         // School details for certificates

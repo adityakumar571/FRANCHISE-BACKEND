@@ -800,37 +800,80 @@ export const getBalanceSheet = asyncHandler(async (req, res) => {
   const expenseAmt = expenses[0]?.t || 0;
   const netProfit = salesAmt - purchAmt - expenseAmt;
 
-  const currentAssets = (obData?.entries?.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('cash'))?.openingDebit || 50000) + 
-                        (obData?.entries?.find(e => e.accountType === 'Asset' && e.accountName.toLowerCase().includes('bank'))?.openingDebit || 200000) +
-                        (sales[0]?.outstanding || 0);
-  
-  const fixedAssets = obData?.entries?.find(e => e.accountType === 'Asset' && !e.accountName.toLowerCase().includes('cash') && !e.accountName.toLowerCase().includes('bank'))?.openingDebit || 100000;
-  
-  const currentLiabilities = purchases[0]?.outstanding || 0;
-  const capital = obData?.entries?.find(e => e.accountType === 'Equity')?.openingDebit || 500000;
+  // Get current assets from opening balance data
+  let currentAssets = [];
+  let fixedAssets = [];
+  let capital = 0;
 
-  const totalAssets = currentAssets + fixedAssets;
-  const totalLiabilities = currentLiabilities + capital + netProfit;
+  if (obData && obData.entries) {
+    // Categorize assets
+    obData.entries.forEach(e => {
+      if (e.accountType === 'Asset') {
+        if (e.accountName.toLowerCase().includes('cash') || e.accountName.toLowerCase().includes('bank') || e.accountName.toLowerCase().includes('debtors') || e.accountName.toLowerCase().includes('receivable')) {
+          currentAssets.push({ label: e.accountName, amount: e.openingDebit || 0 });
+        } else {
+          fixedAssets.push({ label: e.accountName, amount: e.openingDebit || 0 });
+        }
+      }
+      if (e.accountType === 'Equity') {
+        capital = e.openingDebit || 0;
+      }
+    });
+  }
+
+  // Add debtors from sales
+  if (sales[0]?.outstanding > 0) {
+    const debtorsIndex = currentAssets.findIndex(a => a.label.toLowerCase().includes('debtors'));
+    if (debtorsIndex >= 0) {
+      currentAssets[debtorsIndex].amount += sales[0].outstanding;
+    } else {
+      currentAssets.push({ label: 'Debtors', amount: sales[0].outstanding });
+    }
+  }
+
+  // If no assets defined, use defaults
+  if (currentAssets.length === 0) {
+    currentAssets = [
+      { label: 'Cash in Hand', amount: 0 },
+      { label: 'Bank Balance', amount: 0 },
+      { label: 'Debtors', amount: sales[0]?.outstanding || 0 },
+    ];
+  }
+
+  if (fixedAssets.length === 0) {
+    fixedAssets = [{ label: 'Assets', amount: 0 }];
+  }
+
+  if (capital === 0) {
+    capital = 0; // Will be calculated from assets and liabilities
+  }
+
+  const totalCurrentAssets = currentAssets.reduce((s, a) => s + a.amount, 0);
+  const totalFixedAssets = fixedAssets.reduce((s, a) => s + a.amount, 0);
+  const totalAssets = totalCurrentAssets + totalFixedAssets;
+
+  const totalCurrentLiabilities = purchases[0]?.outstanding || 0;
+  const totalCapital = capital || totalAssets; // If no capital, assets = capital
+
+  const totalLiabilities = totalCurrentLiabilities + totalCapital + netProfit;
 
   return res.status(200).json(new apiResponse(200, {
     assets: {
-      currentAssets: [
-        { label: 'Cash in Hand', amount: 50000 },
-        { label: 'Bank Balance', amount: 200000 },
-        { label: 'Debtors', amount: sales[0]?.outstanding || 0 },
-      ],
-      fixedAssets: [
-        { label: 'Furniture & Fixtures', amount: 100000 },
-      ],
+      currentAssets,
+      fixedAssets,
+      totalCurrentAssets,
+      totalFixedAssets,
     },
     liabilities: {
       currentLiabilities: [
-        { label: 'Creditors', amount: purchases[0]?.outstanding || 0 },
+        { label: 'Creditors', amount: totalCurrentLiabilities },
       ],
       capital: [
-        { label: 'Capital Account', amount: capital },
+        { label: 'Capital Account', amount: totalCapital },
         { label: 'Net Profit', amount: netProfit },
       ],
+      totalCurrentLiabilities,
+      totalCapital,
     },
     totalAssets,
     totalLiabilities,

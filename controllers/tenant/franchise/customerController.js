@@ -6,26 +6,8 @@ import { getSaleInvoiceModel } from '../../../models/tenant/franchise/SaleInvoic
 
 const TIER_COLORS = { Regular:'#6b7280', Silver:'#94a3b8', Gold:'#d97706', Platinum:'#7c3aed', Diamond:'#0891b2' };
 
-// Seed customers
-const seedCustomers = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy customers
-  const Customer = getCustomerModel(db);
-  if (await Customer.countDocuments() > 1) return;
-  await Customer.insertMany([
-    { name:'Rahul Sharma',   customerId:'CUS001', phone:'9876543210', email:'rahul@email.com',  tier:'Gold',     walletBalance:1258, loyaltyPoints:450, totalPurchase:145650, dueAmount:0,    isActive:true },
-    { name:'Priya Verma',    customerId:'CUS002', phone:'9876543211', email:'priya@email.com',  tier:'Silver',   walletBalance:500,  loyaltyPoints:280, totalPurchase:89000,  dueAmount:250,  isActive:true },
-    { name:'Amit Kumar',     customerId:'CUS003', phone:'9876543212', email:'amit@email.com',   tier:'Regular',  walletBalance:800,  loyaltyPoints:120, totalPurchase:42400,  dueAmount:0,    isActive:true },
-    { name:'Sunita Singh',   customerId:'CUS004', phone:'9876543213', email:'sunita@email.com', tier:'Platinum', walletBalance:3500, loyaltyPoints:1200,totalPurchase:285000, dueAmount:0,    isActive:true },
-    { name:'Deepak Joshi',   customerId:'CUS005', phone:'9876543214', email:'deepak@email.com', tier:'Regular',  walletBalance:200,  loyaltyPoints:60,  totalPurchase:15600,  dueAmount:120,  isActive:true },
-    { name:'Neha Singh',     customerId:'CUS006', phone:'9001234567', email:'neha@email.com',   tier:'Diamond',  walletBalance:8000, loyaltyPoints:3500,totalPurchase:520000, dueAmount:0,    isActive:true },
-    { name:'Vikram Patel',   customerId:'CUS007', phone:'9800012308', email:'vikram@email.com', tier:'Gold',     walletBalance:2100, loyaltyPoints:680, totalPurchase:185000, dueAmount:500,  isActive:false },
-    { name:'Anjali Verma',   customerId:'CUS008', phone:'9800012309', email:'anjali@email.com', tier:'Silver',   walletBalance:350,  loyaltyPoints:190, totalPurchase:62000,  dueAmount:0,    isActive:true },
-  ]);
-};
-
 // ── GET /api/franchise/customers
 export const getCustomers = asyncHandler(async (req, res) => {
-  await seedCustomers(req.db);
   const { search = '', status = '', tier = '', page = 1, limit = 20 } = req.query;
   const Customer = getCustomerModel(req.db);
 

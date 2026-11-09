@@ -3,37 +3,13 @@ import { apiResponse }  from '../../utils/apiResponse.js'
 import { getRoleModel } from '../../models/tenant/Role.model.js'
 import { getUserModel } from '../../models/tenant/user.model.js'
 
-/* Default system roles seeded on first fetch */
-const SYSTEM_ROLES = [
-  { name: 'SuperAdmin', description: 'Full system access — cannot be restricted', color: '#7c3aed', isSystem: true },
-  { name: 'Admin',      description: 'Franchise admin — manages all operations',  color: '#0c3b73', isSystem: true },
-  { name: 'Accounts',   description: 'Accounts dashboard — cash book, bank, reports', color: '#0891b2', isSystem: true },
-  { name: 'Staff',      description: 'General pharmacy staff — POS, dispensing, inventory', color: '#16a34a', isSystem: true },
-  { name: 'Customer',   description: 'Registered customer/patient portal',        color: '#9333ea', isSystem: true },
-  { name: 'Vendor',     description: 'Supplier/vendor representative — B2B orders', color: '#dc2626', isSystem: true },
-  { name: 'HRManager',  description: 'HR — payroll, leave approval, staff management', color: '#d97706', isSystem: true },
-  { name: 'HRStaff',    description: 'HR — attendance entry, reports',             color: '#ea580c', isSystem: true },
-]
-
 const MAX_CUSTOM_ROLES = 10  // max custom roles per tenant
-
-/* ── Ensure system roles exist ── */
-const seedSystemRoles = async (Role) => {
-  for (const r of SYSTEM_ROLES) {
-    await Role.findOneAndUpdate(
-      { name: r.name },
-      { $setOnInsert: r },
-      { upsert: true, new: true }
-    )
-  }
-}
 
 /* ─────────────────────────────────────────────
    GET /api/roles — List all roles
 ───────────────────────────────────────────── */
 export const getRoles = asyncHandler(async (req, res) => {
   const Role = getRoleModel(req.db)
-  await seedSystemRoles(Role)
 
   const roles = await Role.find({}).sort({ isSystem: -1, name: 1 }).lean()
   const customCount  = roles.filter(r => !r.isSystem).length
