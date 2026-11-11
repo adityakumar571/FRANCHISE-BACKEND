@@ -10,70 +10,13 @@ import { getMedicineBatchModel } from '../../../models/tenant/franchise/Medicine
 import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.model.js';
 import Supplier from '../../../models/Supplier.model.js'; // ← GLOBAL Supplier Model (where medicines are stored)
 
-// ────────────────────────────────────────────────────────────────────────────
-// Seed Supplier Data
-// ────────────────────────────────────────────────────────────────────────────
-const seedSupplierData = async (db) => {
-  return; // ❌ PRODUCTION: Seeding disabled - franchises add their own suppliers
-  
-  const Supplier = getSupplierModel(db);
-  const count = await Supplier.countDocuments();
-  if (count > 0) return;
 
-  await Supplier.insertMany([
-    { supplierCode: 'SUP001', supplierName: 'Medico Agencies', contactPerson: 'Rajesh Kumar', phone: '9876543210', email: 'rajesh@medicoagencies.com', address: '123, Medical Complex, Delhi - 110001', gstNo: '07AAAAA1234A1Z5', dlNo: 'DL-20-2024-00123', creditDays: 30, creditLimit: 500000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP002', supplierName: 'PharmaDist Pvt Ltd', contactPerson: 'Amit Sharma', phone: '9876543211', email: 'amit@pharmadist.com', address: '456, Pharma Hub, Mumbai - 400001', gstNo: '27BBBBB5678B2Z6', dlNo: 'MH-22-2024-00456', creditDays: 45, creditLimit: 750000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP003', supplierName: 'SunPharma Dist', contactPerson: 'Priya Singh', phone: '9876543212', email: 'priya@sunpharma.com', address: '789, Sun Tower, Bengaluru - 560001', gstNo: '29CCCCC9012C3Z7', dlNo: 'KA-25-2024-00789', creditDays: 30, creditLimit: 600000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP004', supplierName: 'Apex Distributors', contactPerson: 'Vikram Reddy', phone: '9876543213', email: 'vikram@apexdist.com', address: '321, Apex Plaza, Hyderabad - 500001', gstNo: '36DDDDD3456D4Z8', dlNo: 'TS-28-2024-00321', creditDays: 60, creditLimit: 400000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP005', supplierName: 'HealthCare Suppliers', contactPerson: 'Sneha Patel', phone: '9876543214', email: 'sneha@healthcare.com', address: '654, Health Center, Pune - 411001', gstNo: '27EEEEE6789E5Z9', dlNo: 'MH-30-2024-00654', creditDays: 30, creditLimit: 350000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP006', supplierName: 'Cipla Distributors', contactPerson: 'Ravi Verma', phone: '9876543215', email: 'ravi@cipladist.com', address: '987, Cipla Tower, Ahmedabad - 380001', gstNo: '24FFFFF0123F6Z0', dlNo: 'GJ-32-2024-00987', creditDays: 45, creditLimit: 800000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP007', supplierName: 'Dr Reddys Supplies', contactPerson: 'Anjali Nair', phone: '9876543216', email: 'anjali@drreddys.com', address: '147, Reddy Complex, Chennai - 600001', gstNo: '33GGGGG4567G7Z1', dlNo: 'TN-35-2024-00147', creditDays: 30, creditLimit: 550000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP008', supplierName: 'Lupin Agencies', contactPerson: 'Karan Joshi', phone: '9876543217', email: 'karan@lupinagencies.com', address: '258, Lupin Plaza, Kolkata - 700001', gstNo: '19HHHHH7890H8Z2', dlNo: 'WB-38-2024-00258', creditDays: 60, creditLimit: 700000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP009', supplierName: 'Torrent Pharma Dist', contactPerson: 'Neha Gupta', phone: '9876543218', email: 'neha@torrentdist.com', address: '369, Torrent Tower, Jaipur - 302001', gstNo: '08IIIII2345I9Z3', dlNo: 'RJ-40-2024-00369', creditDays: 30, creditLimit: 450000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP010', supplierName: 'Zydus Healthcare', contactPerson: 'Arjun Mehta', phone: '9876543219', email: 'arjun@zydus.com', address: '741, Zydus Center, Surat - 395001', gstNo: '24JJJJJ5678J0Z4', dlNo: 'GJ-42-2024-00741', creditDays: 45, creditLimit: 650000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP011', supplierName: 'Alkem Labs Dist', contactPerson: 'Pooja Kapoor', phone: '9876543220', email: 'pooja@alkemdist.com', address: '852, Alkem Hub, Chandigarh - 160001', gstNo: '04KKKKK8901K1Z5', dlNo: 'CH-45-2024-00852', creditDays: 30, creditLimit: 500000, outstanding: 0, status: 'Active' },
-    { supplierCode: 'SUP012', supplierName: 'Glenmark Suppliers', contactPerson: 'Rohit Bansal', phone: '9876543221', email: 'rohit@glenmark.com', address: '963, Glenmark Plaza, Indore - 452001', gstNo: '23LLLLL1234L2Z6', dlNo: 'MP-48-2024-00963', creditDays: 60, creditLimit: 600000, outstanding: 0, status: 'Active' },
-  ]);
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-// Seed dummy Purchase Orders and GRNs
-// ────────────────────────────────────────────────────────────────────────────
-const seedPurchaseData = async (db) => {
-  return; // ❌ PRODUCTION: Seeding disabled - franchises create real purchases
-  
-  const PurchaseOrder = getPurchaseOrderModel(db);
-  const GRN = getGRNModel(db);
-  const PurchaseReturn = getPurchaseReturnModel(db);
-  const count = await PurchaseOrder.countDocuments();
-  if (count > 0) return;
-
-  await PurchaseOrder.insertMany([
-    { poNo: 'PO-2401', supplier: 'Medico Agencies',    items: [{ medicineName: 'Dolo 650 Tablet', qty: 100, ptr: 17, amount: 1700 }, { medicineName: 'Calpol 650 Tablet', qty: 80, ptr: 16, amount: 1280 }],  totalAmount: 24500, status: 'pending',    expectedDate: new Date(Date.now() + 3 * 86400000), createdAt: new Date(Date.now() - 1 * 86400000) },
-    { poNo: 'PO-2400', supplier: 'PharmaDist Pvt Ltd', items: [{ medicineName: 'Azithral 500 Tablet', qty: 50, ptr: 45, amount: 2250 }, { medicineName: 'Augmentin 625', qty: 40, ptr: 68, amount: 2720 }],    totalAmount: 18200, status: 'accepted',   expectedDate: new Date(Date.now() + 2 * 86400000), createdAt: new Date(Date.now() - 2 * 86400000) },
-    { poNo: 'PO-2399', supplier: 'SunPharma Dist',     items: [{ medicineName: 'Pantop DSR Capsule', qty: 60, ptr: 42, amount: 2520 }, { medicineName: 'Pan-D Tablet', qty: 40, ptr: 35, amount: 1400 }],       totalAmount: 9000,  status: 'dispatched', expectedDate: new Date(Date.now() + 1 * 86400000), createdAt: new Date(Date.now() - 3 * 86400000) },
-    { poNo: 'PO-2398', supplier: 'Medico Agencies',    items: [{ medicineName: 'Metformin 500mg', qty: 200, ptr: 8, amount: 1600 }, { medicineName: 'Atorvastatin 10mg', qty: 150, ptr: 15, amount: 2250 }],    totalAmount: 42000, status: 'completed',  expectedDate: new Date(Date.now() - 2 * 86400000), createdAt: new Date(Date.now() - 5 * 86400000) },
-    { poNo: 'PO-2397', supplier: 'Apex Distributors',  items: [{ medicineName: 'Omeprazole 20mg', qty: 100, ptr: 12, amount: 1200 }],                                                                             totalAmount: 5600,  status: 'cancelled',  expectedDate: new Date(Date.now() - 4 * 86400000), createdAt: new Date(Date.now() - 8 * 86400000) },
-  ]);
-
-  await GRN.insertMany([
-    { grnNo: 'GRN-1050', poRef: 'PO-2399', supplier: 'SunPharma Dist',  invoiceNo: 'SP-INV-4421', invoiceDate: new Date(Date.now() - 1 * 86400000), items: [{ medicineName: 'Pantop DSR Capsule', batchNo: 'B240030', expiryDate: new Date(Date.now() + 365 * 86400000), qty: 60, ptr: 42, amount: 2520, rackLabel: 'A-1' }, { medicineName: 'Pan-D Tablet', batchNo: 'B240031', expiryDate: new Date(Date.now() + 300 * 86400000), qty: 40, ptr: 35, amount: 1400, rackLabel: 'A-2' }], totalAmt: 3920, status: 'completed' },
-    { grnNo: 'GRN-1049', poRef: 'PO-2398', supplier: 'Medico Agencies', invoiceNo: 'MA-INV-8812', invoiceDate: new Date(Date.now() - 3 * 86400000), items: [{ medicineName: 'Metformin 500mg', batchNo: 'B240032', expiryDate: new Date(Date.now() + 400 * 86400000), qty: 200, ptr: 8, amount: 1600, rackLabel: 'C-1' }, { medicineName: 'Atorvastatin 10mg', batchNo: 'B240033', expiryDate: new Date(Date.now() + 380 * 86400000), qty: 150, ptr: 15, amount: 2250, rackLabel: 'C-2' }], totalAmt: 3850, status: 'completed' },
-  ]);
-
-  await PurchaseReturn.insertMany([
-    { returnNo: 'PR-101', supplier: 'Medico Agencies', grnRef: 'GRN-1049', items: [{ medicineName: 'Metformin 500mg', batchNo: 'B240032', qty: 10, reason: 'damaged', amount: 80 }, { medicineName: 'Atorvastatin 10mg', batchNo: 'B240033', qty: 5, reason: 'near_expiry', amount: 75 }], totalAmt: 155, status: 'pending' },
-    { returnNo: 'PR-100', supplier: 'PharmaDist',      grnRef: 'GRN-1048', items: [{ medicineName: 'Azithral 500 Tablet', batchNo: 'B240012', qty: 3, reason: 'near_expiry', amount: 135 }],                                                                                                                                                                                            totalAmt: 135, status: 'completed' },
-  ]);
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/purchase/dashboard?date=
 // Purchase dashboard KPIs, chart, payment breakdown
 // ────────────────────────────────────────────────────────────────────────────
 export const getPurchaseDashboard = asyncHandler(async (req, res) => {
-  await seedSupplierData(req.db);
-  await seedPurchaseData(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
 
   const dateParam = req.query.date;
@@ -241,7 +184,6 @@ export const getPurchaseTopItems = asyncHandler(async (req, res) => {
 // GET /api/franchise/purchase-orders?search=&status=&page=
 // ────────────────────────────────────────────────────────────────────────────
 export const getPurchaseOrders = asyncHandler(async (req, res) => {
-  await seedPurchaseData(req.db);
   const { search = '', status = '', page = 1, limit = 20 } = req.query;
   const PurchaseOrder = getPurchaseOrderModel(req.db);
 
@@ -398,7 +340,6 @@ export const updatePurchaseOrderStatus = asyncHandler(async (req, res) => {
 // GET /api/franchise/grn?page=&limit=&search=&supplier=&status=&from=&to=
 // ────────────────────────────────────────────────────────────────────────────
 export const getGRNList = asyncHandler(async (req, res) => {
-  await seedPurchaseData(req.db);
   const { page = 1, limit = 20, search = '', supplier = '', status = '', from = '', to = '' } = req.query;
   const GRN = getGRNModel(req.db);
 
@@ -548,7 +489,6 @@ export const getGRNById = asyncHandler(async (req, res) => {
 // GET /api/franchise/purchase-returns?page=&limit=&search=&supplier=&status=&from=&to=
 // ────────────────────────────────────────────────────────────────────────────
 export const getPurchaseReturns = asyncHandler(async (req, res) => {
-  await seedPurchaseData(req.db);
   const { page = 1, limit = 20, search = '', supplier = '', status = '', from = '', to = '' } = req.query;
   const PurchaseReturn = getPurchaseReturnModel(req.db);
 
@@ -884,7 +824,6 @@ export const debugSuppliers = asyncHandler(async (req, res) => {
 // Get all suppliers with outstanding balance summary
 // ────────────────────────────────────────────────────────────────────────────
 export const getSupplierLedgerSummary = asyncHandler(async (req, res) => {
-  await seedSupplierData(req.db);
   const Supplier = getSupplierModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
 

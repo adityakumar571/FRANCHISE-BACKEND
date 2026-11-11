@@ -20,116 +20,8 @@ import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.mode
 import { getLiveWholesaleRateModel } from '../../../models/tenant/franchise/LiveWholesaleRate.model.js';
 import { getPurchaseOrderModel } from '../../../models/tenant/franchise/PurchaseOrder.model.js';
 
-// ── Seed live rates ──────────────────────────────────────────────────────────
-const seedLiveRates = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy live rates
-  const LWR = getLiveWholesaleRateModel(db);
-  if (await LWR.countDocuments() > 0) return;
-  const Medicine = getMedicineModel(db);
-  const Supplier  = getSupplierModel(db);
-  const meds = await Medicine.find({ isActive: true }).limit(8).lean();
-  const sups = await Supplier.find({ isActive: true }).limit(5).lean();
-  if (!meds.length || !sups.length) return;
-
-  const schemes = ['10+1', '5+1', '10+2', 'No Scheme', '6+1'];
-  const deliveries = [1, 1, 2, 3, 2];
-  const docs = [];
-  for (const med of meds) {
-    for (let i = 0; i < Math.min(sups.length, 4); i++) {
-      const s = sups[i];
-      const base = +(med.purchasePrice * (1 + i * 0.03)).toFixed(2);
-      const gst  = +(base * med.gstPercent / 100).toFixed(2);
-      docs.push({
-        medicineId:    med._id,
-        medicineName:  med.name,
-        strength:      med.strength || '',
-        packSize:      med.packSize || '',
-        supplierId:    s._id,
-        supplierName:  s.name,
-        basicRate:     base,
-        mrp:           med.mrp,
-        discountPct:   [12, 10, 8, 6][i] || 5,
-        scheme:        schemes[i],
-        gstPct:        med.gstPercent,
-        effectiveRate: +(base + gst).toFixed(2),
-        stock:         [120, 85, 200, 60][i] || 50,
-        deliveryDays:  deliveries[i],
-        isActive:      true,
-      });
-    }
-  }
-  await LWR.insertMany(docs);
-};
-
-const seedLiveOrders = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy purchase orders
-  // Use PurchaseOrder instead of LiveOrder (unified tracking)
-  const PO = getPurchaseOrderModel(db);
-  if (await PO.countDocuments({ source: 'live_rates_module' }) > 0) return;
-  
-  const Supplier = getSupplierModel(db);
-  const sups = await Supplier.find().limit(4).lean();
-  if (!sups.length) return;
-  
-  await PO.insertMany([
-    { 
-      poNo: 'LR-2025-1001', 
-      supplier: sups[0]?.name || 'Medico Agency',
-      items: [{medicineName:'Paracetamol 650mg',qty:50,ptr:15.95,mrp:0,scheme:'',amount:680}],
-      totalAmount: 2820,
-      totalMRP: 3000,
-      discountAmt: 300,
-      gstAmt: 120,
-      grandTotal: 2820,
-      status: 'In Transit',
-      source: 'live_rates_module',
-      createdAt: new Date(Date.now()-1*86400000)
-    },
-    { 
-      poNo: 'LR-2025-1002',
-      supplier: sups[1]?.name || 'Life Care Distributors',
-      items: [{medicineName:'Azithral 500 Tablet',qty:30,ptr:43,mrp:0,scheme:'',amount:1161.8}],
-      totalAmount: 5350,
-      totalMRP: 5600,
-      discountAmt: 450,
-      gstAmt: 200,
-      grandTotal: 5350,
-      status: 'Delivered',
-      source: 'live_rates_module',
-      createdAt: new Date(Date.now()-3*86400000)
-    },
-    { 
-      poNo: 'LR-2025-1003',
-      supplier: sups[2]?.name || 'Apollo Pharma',
-      items: [{medicineName:'Amoxicillin 500mg',qty:10,ptr:28,mrp:0,scheme:'',amount:492.8}],
-      totalAmount: 1160,
-      totalMRP: 1200,
-      discountAmt: 120,
-      gstAmt: 80,
-      grandTotal: 1160,
-      status: 'Pending',
-      source: 'live_rates_module',
-      createdAt: new Date(Date.now()-6*86400000)
-    },
-    { 
-      poNo: 'LR-2025-1004',
-      supplier: sups[3]?.name || 'Sunrise Pharmaceuticals',
-      items: [{medicineName:'Metformin 500mg',qty:100,ptr:8,mrp:0,scheme:'',amount:800}],
-      totalAmount: 8550,
-      totalMRP: 8900,
-      discountAmt: 700,
-      gstAmt: 350,
-      grandTotal: 8550,
-      status: 'Delivered',
-      source: 'live_rates_module',
-      createdAt: new Date(Date.now()-11*86400000)
-    },
-  ]);
-};
-
 // ── GET /api/franchise/live-rates ───────────────────────────────────────────
 export const getLiveRates = asyncHandler(async (req, res) => {
-  await seedLiveRates(req.db);
   const { q = '', strength = '', pack_size = '', page = 1, limit = 20 } = req.query;
   const LWR = getLiveWholesaleRateModel(req.db);
 
@@ -188,7 +80,6 @@ export const getLiveRates = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/live-rates/compare?medicine= ─────────────────────────
 export const compareSuppliers = asyncHandler(async (req, res) => {
-  await seedLiveRates(req.db);
   const { medicine = '' } = req.query;
   const LWR = getLiveWholesaleRateModel(req.db);
 
@@ -245,7 +136,6 @@ export const getPriceHistory = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/live-rates/best-deal?medicine= ───────────────────────
 export const getBestDeal = asyncHandler(async (req, res) => {
-  await seedLiveRates(req.db);
   const { medicine = '' } = req.query;
   const LWR = getLiveWholesaleRateModel(req.db);
 
@@ -269,7 +159,6 @@ export const getBestDeal = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/live-rates/supplier-stock?supplierId= ────────────────
 export const getSupplierStock = asyncHandler(async (req, res) => {
-  await seedLiveRates(req.db);
   const { supplierId = '' } = req.query;
   const LWR = getLiveWholesaleRateModel(req.db);
 
@@ -285,7 +174,6 @@ export const getSupplierStock = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/live-rates/schemes?medicine= ─────────────────────────
 export const getSchemes = asyncHandler(async (req, res) => {
-  await seedLiveRates(req.db);
   const { medicine = '' } = req.query;
   const LWR = getLiveWholesaleRateModel(req.db);
   const filter = { isActive: true, scheme: { $ne: 'No Scheme' } };
@@ -395,7 +283,6 @@ export const placeOrder = asyncHandler(async (req, res) => {
 
 // ── GET /api/franchise/live-rates/order-tracking/:orderId ───────────────────
 export const getOrderTracking = asyncHandler(async (req, res) => {
-  await seedLiveOrders(req.db);
   const { orderId } = req.params;
   
   // Use PurchaseOrder instead of LiveOrder (unified tracking)

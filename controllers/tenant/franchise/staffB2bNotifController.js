@@ -13,29 +13,13 @@ import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.mode
 
 // ════ STAFF ════════════════════════════════════════════════════════════════════
 
-const seedStaff = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy staff
-  const Staff = getFranchiseStaffModel(db);
-  if (await Staff.countDocuments() > 0) return;
-  await Staff.insertMany([
-    { name: 'Rajesh Kumar',  staffId: 'STF001', role: 'Franchise Owner', department: 'Management', phone: '9800001001', shift: 'Morning', salary: 0,     attendance: 'Present', todaySales: 0     },
-    { name: 'Amit Singh',    staffId: 'STF002', role: 'Branch Manager',  department: 'Management', phone: '9800001002', shift: 'Morning', salary: 35000, attendance: 'Present', todaySales: 0     },
-    { name: 'Priya Sharma',  staffId: 'STF003', role: 'Pharmacist',      department: 'Pharmacy',   phone: '9800001003', shift: 'Morning', salary: 28000, attendance: 'Present', todaySales: 12450 },
-    { name: 'Deepak Verma',  staffId: 'STF004', role: 'Pharmacist',      department: 'Pharmacy',   phone: '9800001004', shift: 'Evening', salary: 28000, attendance: 'Late',    todaySales: 8760  },
-    { name: 'Neha Gupta',    staffId: 'STF005', role: 'Cashier',         department: 'Sales',      phone: '9800001005', shift: 'Morning', salary: 18000, attendance: 'Present', todaySales: 21300 },
-    { name: 'Suresh Patel',  staffId: 'STF006', role: 'Cashier',         department: 'Sales',      phone: '9800001006', shift: 'Evening', salary: 18000, attendance: 'Absent',  todaySales: 0     },
-    { name: 'Kavita Joshi',  staffId: 'STF007', role: 'Pharmacist',      department: 'Pharmacy',   phone: '9800001007', shift: 'Night',   salary: 30000, attendance: 'Present', todaySales: 9870, isActive: false },
-  ]);
-};
-
 export const getStaff = asyncHandler(async (req, res) => {
-  await seedStaff(req.db);
   const { search = '', dept = '', status = '', page = 1, limit = 20 } = req.query;
   const Staff = getFranchiseStaffModel(req.db);
   const filter = {};
   if (search) filter.$or = [{ name: new RegExp(search, 'i') }, { staffId: new RegExp(search, 'i') }, { role: new RegExp(search, 'i') }];
-  if (dept)   filter.department = new RegExp(dept, 'i');
-  if (status === 'Active')   filter.isActive = true;
+  if (dept) filter.department = new RegExp(dept, 'i');
+  if (status === 'Active') filter.isActive = true;
   if (status === 'Inactive') filter.isActive = false;
   const skip = (Number(page) - 1) * Number(limit);
   const [staff, total] = await Promise.all([
@@ -58,8 +42,8 @@ export const getStaff = asyncHandler(async (req, res) => {
     kpi: {
       total: await Staff.countDocuments(),
       present: attMap['Present'] || 0,
-      absent:  attMap['Absent']  || 0,
-      late:    attMap['Late']    || 0,
+      absent: attMap['Absent'] || 0,
+      late: attMap['Late'] || 0,
     },
   }, 'Staff fetched'));
 });
@@ -85,7 +69,6 @@ export const deleteStaff = asyncHandler(async (req, res) => {
 });
 
 export const getTodayAttendance = asyncHandler(async (req, res) => {
-  await seedStaff(req.db);
   const Staff = getFranchiseStaffModel(req.db);
   const staff = await Staff.find({ isActive: { $ne: false } }).lean();
   return res.status(200).json(new apiResponse(200, staff.map(s => ({
@@ -103,36 +86,7 @@ export const markAttendance = asyncHandler(async (req, res) => {
 
 // ════ B2B ORDERS ═══════════════════════════════════════════════════════════════
 
-const seedB2BOrders = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy B2B orders
-  const B2B = getB2BOrderModel(db);
-  if (await B2B.countDocuments() > 0) return;
-  const sups = [
-    { name: 'Gupta Pharma',       items: [{ medicineName: 'Paracetamol 650mg', qty: 100, unit: 'Strip', rate: 8.5, amount: 850 }, { medicineName: 'Azithral 500 Tablet', qty: 50, unit: 'Strip', rate: 45, amount: 2250 }] },
-    { name: 'R.K. Distributors',  items: [{ medicineName: 'Calpol 650 Tablet', qty: 80, unit: 'Strip', rate: 16, amount: 1280 }] },
-    { name: 'MedPlus Pharma',     items: [{ medicineName: 'Metformin 500mg', qty: 200, unit: 'Strip', rate: 8, amount: 1600 }, { medicineName: 'Atorvastatin 10mg', qty: 100, unit: 'Strip', rate: 15, amount: 1500 }] },
-    { name: 'Medico Agency',      items: [{ medicineName: 'Pantop DSR Capsule', qty: 60, unit: 'Strip', rate: 42, amount: 2520 }] },
-  ];
-  const statuses = ['Delivered', 'Shipped', 'Confirmed', 'Pending', 'Cancelled', 'Delivered', 'Shipped', 'Delivered', 'Pending', 'Delivered', 'Delivered', 'Delivered', 'Confirmed'];
-  const payStatuses = ['Paid', 'Paid', 'Pending', 'Pending', 'Paid', 'Paid', 'Partial', 'Paid', 'Overdue', 'Paid', 'Paid', 'Paid', 'Pending'];
-  for (let i = 0; i < 13; i++) {
-    const s = sups[i % sups.length];
-    const amt = s.items.reduce((sum, it) => sum + it.amount, 0) * (1 + Math.random() * 0.5);
-    await B2B.create({
-      orderId:       `B2B-2025-${String(1001 + i).padStart(4, '0')}`,
-      supplierName:  s.name,
-      items:         s.items,
-      totalQty:      s.items.reduce((sum, it) => sum + it.qty, 0),
-      amount:        +amt.toFixed(2),
-      orderStatus:   statuses[i],
-      paymentStatus: payStatuses[i],
-      orderDate:     new Date(Date.now() - i * 86400000 * 2),
-    });
-  }
-};
-
 export const getB2BOrders = asyncHandler(async (req, res) => {
-  await seedB2BOrders(req.db);
   const { status = '', page = 1, limit = 20 } = req.query;
   const B2B = getB2BOrderModel(req.db);
   const filter = {};
@@ -143,16 +97,16 @@ export const getB2BOrders = asyncHandler(async (req, res) => {
     B2B.countDocuments(filter),
   ]);
   const kpi = {
-    total:     await B2B.countDocuments(),
+    total: await B2B.countDocuments(),
     delivered: await B2B.countDocuments({ orderStatus: 'Delivered' }),
     inTransit: await B2B.countDocuments({ orderStatus: 'Shipped' }),
-    pending:   await B2B.countDocuments({ orderStatus: 'Pending' }),
+    pending: await B2B.countDocuments({ orderStatus: 'Pending' }),
   };
   return res.status(200).json(new apiResponse(200, {
     orders: orders.map(o => ({
       _id: o._id, orderId: o.orderId, supplier: o.supplierName,
-      date:    new Date(o.orderDate).toLocaleDateString('en-IN'),
-      items:   o.items?.length || 0,
+      date: new Date(o.orderDate).toLocaleDateString('en-IN'),
+      items: o.items?.length || 0,
       totalQty: o.totalQty, amount: o.amount,
       orderStatus: o.orderStatus, paymentStatus: o.paymentStatus,
     })),
@@ -171,7 +125,7 @@ export const updateB2BOrderStatus = asyncHandler(async (req, res) => {
   const { orderStatus, paymentStatus } = req.body;
   const B2B = getB2BOrderModel(req.db);
   const upd = {};
-  if (orderStatus)   upd.orderStatus   = orderStatus;
+  if (orderStatus) upd.orderStatus = orderStatus;
   if (paymentStatus) upd.paymentStatus = paymentStatus;
   const order = await B2B.findByIdAndUpdate(req.params.id, upd, { new: true });
   if (!order) return res.status(404).json(new apiResponse(404, null, 'Not found'));
@@ -180,35 +134,15 @@ export const updateB2BOrderStatus = asyncHandler(async (req, res) => {
 
 // ════ NOTIFICATIONS ════════════════════════════════════════════════════════════
 
-const NOTIF_SEED = [
-  { title: 'Low Stock Alert',       message: 'Dolo 650 Tablet is running low (12 strips left)', category: 'Stock',        isRead: false },
-  { title: 'Expiry Alert',          message: 'Augmentin 625 expires in 25 days (120 strips)',   category: 'Expiry',       isRead: false },
-  { title: 'Order Delivered',       message: 'B2B Order #B2B-2025-1001 has been delivered',     category: 'Order',        isRead: false },
-  { title: 'Subscription Reminder', message: 'Your subscription expires in 30 days',            category: 'Subscription', isRead: true  },
-  { title: 'Day Closing Due',       message: 'Today\'s day closing is pending',                  category: 'Staff',        isRead: true  },
-  { title: 'New Order Placed',      message: 'Purchase order PO-2401 has been confirmed',       category: 'Order',        isRead: false },
-  { title: 'Stock Adjustment',      message: 'ADJ-302 submitted and awaiting approval',         category: 'Stock',        isRead: false },
-  { title: 'System Update',         message: 'PharmaNexus has been updated to v2.1.0',          category: 'System',       isRead: true  },
-];
-
 export const getNotifications = asyncHandler(async (req, res) => {
   // Use the existing Notification model from tenant
   const Notification = getNotificationModel(req.db);
   const { category = '', read = '', page = 1, limit = 20 } = req.query;
 
-  // Seed some if empty - DISABLED FOR PRODUCTION
-  const cnt = await Notification.countDocuments({});
-  if (cnt === 0 && false) { // Condition disabled - no dummy notifications
-    const dummyUserId = null;
-    for (const n of NOTIF_SEED) {
-      await Notification.create({ ...n, userId: dummyUserId, type: n.category.toLowerCase(), message: n.message, title: n.title });
-    }
-  }
-
   const filter = {};
   if (category && category !== 'All') filter.type = category.toLowerCase();
   if (read === 'unread') filter.isRead = false;
-  if (read === 'read')   filter.isRead = true;
+  if (read === 'read') filter.isRead = true;
 
   const skip = (Number(page) - 1) * Number(limit);
   const [notifs, total] = await Promise.all([
@@ -250,42 +184,18 @@ export const deleteNotification = asyncHandler(async (req, res) => {
 
 // ════ AUDIT LOGS ═══════════════════════════════════════════════════════════════
 
-const seedAuditLogs = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy audit logs
-  const AuditLog = getFranchiseAuditLogModel(db);
-  if (await AuditLog.countDocuments() > 0) return;
-  const LOGS = [
-    { action: 'LOGIN',  module: 'Auth',      description: 'User logged in',              userName: 'Admin',    userRole: 'Franchise Owner', ipAddress: '192.168.1.1',  result: 'Success' },
-    { action: 'CREATE', module: 'POS',       description: 'Created invoice INV-2025-1524',userName: 'Neha Gupta',userRole: 'Cashier',       ipAddress: '192.168.1.5',  result: 'Success' },
-    { action: 'UPDATE', module: 'Medicine',  description: 'Updated Dolo 650 Tablet',     userName: 'Priya Sharma',userRole: 'Pharmacist',  ipAddress: '192.168.1.3',  result: 'Success' },
-    { action: 'DELETE', module: 'Customer',  description: 'Deleted customer CUS009',     userName: 'Admin',    userRole: 'Franchise Owner', ipAddress: '192.168.1.1',  result: 'Success' },
-    { action: 'LOGIN',  module: 'Auth',      description: 'Failed login attempt',        userName: 'Unknown',  userRole: '—',              ipAddress: '203.45.12.8',  result: 'Failed'  },
-    { action: 'EXPORT', module: 'Reports',   description: 'Exported Sales Report',       userName: 'Admin',    userRole: 'Franchise Owner', ipAddress: '192.168.1.1',  result: 'Success' },
-    { action: 'CREATE', module: 'Purchase',  description: 'Created GRN GRN-1051',        userName: 'Amit Singh',userRole: 'Branch Manager',ipAddress: '192.168.1.2',  result: 'Success' },
-    { action: 'UPDATE', module: 'Staff',     description: 'Updated staff STF006',        userName: 'Amit Singh',userRole: 'Branch Manager',ipAddress: '192.168.1.2',  result: 'Success' },
-    { action: 'VIEW',   module: 'Settings',  description: 'Viewed settings page',        userName: 'Admin',    userRole: 'Franchise Owner', ipAddress: '192.168.1.1',  result: 'Success' },
-    { action: 'CREATE', module: 'Inventory', description: 'Stock adjustment ADJ-302 submitted',userName: 'Priya Sharma',userRole:'Pharmacist',ipAddress:'192.168.1.3', result:'Success' },
-    { action: 'LOGIN',  module: 'Auth',      description: 'User logged in',              userName: 'Deepak Verma',userRole:'Pharmacist',   ipAddress: '192.168.1.4',  result: 'Success' },
-    { action: 'UPDATE', module: 'POS',       description: 'Day closing completed',       userName: 'Neha Gupta',userRole: 'Cashier',       ipAddress: '192.168.1.5',  result: 'Success' },
-  ];
-  for (let i = 0; i < LOGS.length; i++) {
-    await AuditLog.create({ ...LOGS[i], createdAt: new Date(Date.now() - i * 2 * 3600000) });
-  }
-};
-
 export const getAuditLogs = asyncHandler(async (req, res) => {
-  await seedAuditLogs(req.db);
   const { action = '', module = '', from = '', to = '', search = '', page = 1, limit = 20 } = req.query;
   const AuditLog = getFranchiseAuditLogModel(req.db);
 
   const filter = {};
-  if (action) filter.action  = action;
-  if (module) filter.module  = new RegExp(module, 'i');
+  if (action) filter.action = action;
+  if (module) filter.module = new RegExp(module, 'i');
   if (search) filter.$or = [{ description: new RegExp(search, 'i') }, { userName: new RegExp(search, 'i') }];
   if (from || to) {
     filter.createdAt = {};
-    if (from) { const s = new Date(from); s.setHours(0,0,0,0); filter.createdAt.$gte = s; }
-    if (to)   { const e = new Date(to);   e.setHours(23,59,59,999); filter.createdAt.$lte = e; }
+    if (from) { const s = new Date(from); s.setHours(0, 0, 0, 0); filter.createdAt.$gte = s; }
+    if (to) { const e = new Date(to); e.setHours(23, 59, 59, 999); filter.createdAt.$lte = e; }
   }
 
   const skip = (Number(page) - 1) * Number(limit);
@@ -383,20 +293,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
 
 // ════ SUPPORT ═════════════════════════════════════════════════════════════════
 
-const seedTickets = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy support tickets
-  const Ticket = getSupportTicketModel(db);
-  if (await Ticket.countDocuments() > 0) return;
-  await Ticket.insertMany([
-    { ticketId: 'TKT-001', subject: 'Barcode scanner not working', category: 'Technical', priority: 'High',   status: 'In Progress', createdBy: 'Admin', messages: [{ sender: 'Admin', text: 'Scanner not scanning barcodes since morning' }, { sender: 'Support', text: 'Our team is looking into this' }] },
-    { ticketId: 'TKT-002', subject: 'Invoice printing issue',      category: 'Technical', priority: 'Medium', status: 'Open',        createdBy: 'Admin', messages: [{ sender: 'Admin', text: 'Invoice PDF not generating correctly' }] },
-    { ticketId: 'TKT-003', subject: 'Stock report discrepancy',    category: 'Inventory', priority: 'Low',    status: 'Resolved',    createdBy: 'Admin', messages: [] },
-    { ticketId: 'TKT-004', subject: 'Billing query',               category: 'Billing',   priority: 'Medium', status: 'Closed',      createdBy: 'Admin', messages: [] },
-  ]);
-};
-
 export const getSupportTickets = asyncHandler(async (req, res) => {
-  await seedTickets(req.db);
   const { search = '', page = 1, limit = 20 } = req.query;
   const Ticket = getSupportTicketModel(req.db);
   const filter = {};
@@ -417,7 +314,7 @@ export const getSupportTickets = asyncHandler(async (req, res) => {
 
 export const createSupportTicket = asyncHandler(async (req, res) => {
   const Ticket = getSupportTicketModel(req.db);
-  const count  = await Ticket.countDocuments();
+  const count = await Ticket.countDocuments();
   const t = await Ticket.create({ ...req.body, ticketId: `TKT-${String(count + 1).padStart(3, '0')}` });
   return res.status(201).json(new apiResponse(201, t, 'Ticket created'));
 });
@@ -432,10 +329,10 @@ export const getSupportTicketById = asyncHandler(async (req, res) => {
 export const getSupportFAQs = asyncHandler(async (req, res) => {
   const FAQS = [
     { q: 'How to add a new medicine?', a: 'Go to Medicine Master > Add Medicine and fill in the details.' },
-    { q: 'How to do day closing?',      a: 'Go to POS Billing > Day Closing, enter physical cash count and click Close Day.' },
-    { q: 'How to process a return?',    a: 'Go to POS Billing > Return Bill, enter the invoice number and select items to return.' },
-    { q: 'How to add a supplier?',      a: 'Go to Suppliers > Add Supplier and fill in the supplier details.' },
-    { q: 'How to generate reports?',    a: 'Go to Reports section and select the report type, date range, and click Generate.' },
+    { q: 'How to do day closing?', a: 'Go to POS Billing > Day Closing, enter physical cash count and click Close Day.' },
+    { q: 'How to process a return?', a: 'Go to POS Billing > Return Bill, enter the invoice number and select items to return.' },
+    { q: 'How to add a supplier?', a: 'Go to Suppliers > Add Supplier and fill in the supplier details.' },
+    { q: 'How to generate reports?', a: 'Go to Reports section and select the report type, date range, and click Generate.' },
     { q: 'How to setup rack management?', a: 'Go to Inventory > Rack & Warehouse to add and manage storage locations.' },
     { q: 'How to check low stock items?', a: 'Go to Inventory Dashboard or Inventory > Current Stock and filter by Low Stock status.' },
   ];
@@ -445,12 +342,12 @@ export const getSupportFAQs = asyncHandler(async (req, res) => {
 // ════ LAYOUT 3D ═══════════════════════════════════════════════════════════════
 
 const COUNTERS_DATA = [
-  { id: 'CTR-A', label: 'Counter A', type: 'main',   x: 10, y: 10, status: 'active',   medicines: 45 },
-  { id: 'CTR-B', label: 'Counter B', type: 'main',   x: 50, y: 10, status: 'active',   medicines: 38 },
-  { id: 'CTR-C', label: 'Counter C', type: 'billing',x: 90, y: 10, status: 'active',   medicines: 22 },
-  { id: 'CTR-D', label: 'Counter D', type: 'main',   x: 10, y: 60, status: 'inactive', medicines: 0  },
-  { id: 'CTR-E', label: 'Counter E', type: 'billing',x: 50, y: 60, status: 'active',   medicines: 31 },
-  { id: 'CTR-F', label: 'Counter F', type: 'main',   x: 90, y: 60, status: 'active',   medicines: 28 },
+  { id: 'CTR-A', label: 'Counter A', type: 'main', x: 10, y: 10, status: 'active', medicines: 45 },
+  { id: 'CTR-B', label: 'Counter B', type: 'main', x: 50, y: 10, status: 'active', medicines: 38 },
+  { id: 'CTR-C', label: 'Counter C', type: 'billing', x: 90, y: 10, status: 'active', medicines: 22 },
+  { id: 'CTR-D', label: 'Counter D', type: 'main', x: 10, y: 60, status: 'inactive', medicines: 0 },
+  { id: 'CTR-E', label: 'Counter E', type: 'billing', x: 50, y: 60, status: 'active', medicines: 31 },
+  { id: 'CTR-F', label: 'Counter F', type: 'main', x: 90, y: 60, status: 'active', medicines: 28 },
 ];
 
 export const getLayoutCounters = asyncHandler(async (req, res) => {
@@ -521,25 +418,25 @@ export const getStaffAttendanceByDate = asyncHandler(async (req, res) => {
   const staff = await Staff.find(filter).lean();
 
   const summary = {
-    date:    date || new Date().toISOString().split('T')[0],
-    total:   staff.length,
+    date: date || new Date().toISOString().split('T')[0],
+    total: staff.length,
     present: staff.filter(s => s.attendance === 'Present').length,
-    absent:  staff.filter(s => s.attendance === 'Absent').length,
-    late:    staff.filter(s => s.attendance === 'Late').length,
+    absent: staff.filter(s => s.attendance === 'Absent').length,
+    late: staff.filter(s => s.attendance === 'Late').length,
     onLeave: staff.filter(s => s.attendance === 'Leave').length,
   };
 
   return res.status(200).json(new apiResponse(200, {
     ...summary,
     records: staff.map(s => ({
-      _id:        s._id,
-      staffId:    s.staffId,
-      name:       s.name,
-      role:       s.role,
+      _id: s._id,
+      staffId: s.staffId,
+      name: s.name,
+      role: s.role,
       department: s.department,
-      shift:      s.shift,
+      shift: s.shift,
       attendance: s.attendance,
-      isActive:   s.isActive,
+      isActive: s.isActive,
     })),
   }, 'Attendance fetched'));
 });

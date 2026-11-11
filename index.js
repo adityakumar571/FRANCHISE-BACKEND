@@ -56,10 +56,6 @@ import tenantAuthRoutes         from "./routes/tenant/auth/tenantUserLoginRoutes
 import userManagementRoutes     from "./routes/tenant/userManagementRoutes.js";
 import roleRoutes               from "./routes/tenant/roleRoutes.js";
 import tenantSubscriptionRoutes from "./routes/tenantSelfSubscriptionRoutes.js";
-import hrRoutes                 from "./routes/tenant/hr/hrRoutes.js";
-import attendanceLeaveRoutes    from "./routes/tenant/hr/attendanceLeaveRoutes.js";
-import payrollRoutes            from "./routes/tenant/hr/payrollRoutes.js";
-import accountRoutes            from "./routes/tenant/hr/accountRoutes.js";
 
 /* ── Franchise Login controller ── */
 import { franchiseLogin } from "./controllers/tenant.controller.js";
@@ -258,12 +254,6 @@ app.use("/api/franchise",             franchiseRemainingRoutes);
 /* Tenant's own subscription info */
 app.use("/api/my-subscription", tenantSubscriptionRoutes);
 app.use("/api/admins",          createAdminRoutes);
-
-/* HR Module */
-app.use("/api/hr", hrRoutes);
-app.use("/api/hr", attendanceLeaveRoutes);
-app.use("/api/hr", payrollRoutes);
-app.use("/api/hr", accountRoutes);
 
 /* ── Fallback ── */
 app.use("/api", (_req, res) => res.send("Franchise API working ✅"));

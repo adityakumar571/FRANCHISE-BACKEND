@@ -8,39 +8,10 @@ import { getStockAdjustmentModel } from '../../../models/tenant/franchise/StockA
 import { getRackModel } from '../../../models/tenant/franchise/Rack.model.js';
 import { getInventoryAuditModel } from '../../../models/tenant/franchise/InventoryAudit.model.js';
 
-// ── Seed racks ────────────────────────────────────────────────────────────────
-const seedRacks = async (db) => {
-  const Rack = getRackModel(db);
-  if (await Rack.countDocuments() > 0) return;
-  await Rack.insertMany([
-    { code: 'A01', name: 'RACK-A', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 1', section: 'Pain Relief', description: 'Analgesics & Antipyretics', capacity: 20 },
-    { code: 'A02', name: 'RACK-B', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 2', section: 'Antibiotics', description: 'Antibiotics',                capacity: 15 },
-    { code: 'B01', name: 'RACK-C', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 3', section: 'Cardiac', description: 'Cardiac & BP',              capacity: 12 },
-    { code: 'B02', name: 'RACK-D', area: 'Main Store',  warehouse: 'Main Pharmacy', shelf: 'Shelf 3', section: 'Diabetes', description: 'Antidiabetics',             capacity: 15 },
-    { code: 'C01', name: 'RACK-E', area: 'Back Store',  warehouse: 'Back Store', shelf: 'Shelf 1', section: 'Cold & Cough', description: 'Cold & Cough',              capacity: 20 },
-    { code: 'D01', name: 'RACK-F', area: 'Back Store',  warehouse: 'Back Store', shelf: 'Shelf 2', section: 'Vitamins', description: 'Vitamins & Supplements',    capacity: 25 },
-    { code: 'REF', name: 'FRIDGE',  area: 'Refrigerator', warehouse: 'Cold Storage', shelf: 'Fridge',  section: 'Cold Storage', description: 'Cold Storage - Insulin/Vaccines', capacity: 8 },
-  ]);
-};
-
-const seedAdjustments = async (db) => {
-  return; // DISABLED FOR PRODUCTION - No dummy stock adjustments
-  const SA = getStockAdjustmentModel(db);
-  if (await SA.countDocuments() > 0) return;
-  const Medicine = getMedicineModel(db);
-  const meds = await Medicine.find().limit(3).lean();
-  await SA.insertMany([
-    { adjNo: 'ADJ-301', medicine: meds[0]?.name || 'Azithromycin 500mg', batch: 'AZT0012', type: 'expired',    qty: -60, reason: 'Expired stock quarantine',      status: 'completed', by: 'Rahul Kumar' },
-    { adjNo: 'ADJ-300', medicine: meds[1]?.name || 'Paracetamol 650mg',  batch: 'CR08023', type: 'damaged',    qty: -10, reason: 'Packaging damage',             status: 'pending',   by: 'Amit Singh'  },
-    { adjNo: 'ADJ-299', medicine: meds[2]?.name || 'Metformin 500mg',    batch: 'MF2388',  type: 'correction', qty: +5,  reason: 'Physical count correction',     status: 'completed', by: 'Priya Sharma' },
-  ]);
-};
-
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/inventory/dashboard
 // ────────────────────────────────────────────────────────────────────────────
 export const getInventoryDashboard = asyncHandler(async (req, res) => {
-  await seedRacks(req.db);
   const Medicine = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
 
@@ -273,7 +244,6 @@ export const getExpiredStock = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/damaged  (from stock adjustments)
 // ────────────────────────────────────────────────────────────────────────────
 export const getDamagedStock = asyncHandler(async (req, res) => {
-  await seedAdjustments(req.db);
   const SA = getStockAdjustmentModel(req.db);
   const { page = 1, limit = 20, search = '' } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
@@ -523,7 +493,6 @@ export const getBatchExpiry = asyncHandler(async (req, res) => {
 // GET /api/franchise/inventory/rack  + POST /api/franchise/inventory/rack
 // ────────────────────────────────────────────────────────────────────────────
 export const getRacks = asyncHandler(async (req, res) => {
-  await seedRacks(req.db);
   const Rack        = getRackModel(req.db);
   const Medicine    = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
@@ -651,7 +620,6 @@ export const deleteRack = asyncHandler(async (req, res) => {
 // GET + POST /api/franchise/inventory/adjustments
 // ────────────────────────────────────────────────────────────────────────────
 export const getStockAdjustments = asyncHandler(async (req, res) => {
-  await seedAdjustments(req.db);
   const { page = 1, limit = 20 } = req.query;
   const SA   = getStockAdjustmentModel(req.db);
   const skip = (Number(page) - 1) * Number(limit);
