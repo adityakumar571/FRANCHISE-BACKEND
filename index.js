@@ -156,6 +156,11 @@ app.use("/api/franchise-suppliers", franchiseSupplierRoutes);
 import masterMedicineRoutes from "./routes/MasterMedicineRoutes.js";
 app.use("/api/master-medicines", masterMedicineRoutes);
 
+/* Medicine Master routes - Superadmin only (global medicines) */
+import medicineMasterRoutes from "./routes/MedicineMasterRoutes.js";
+// ❌ MUST come BEFORE dbMiddleware - SuperAdmin doesn't have tenant context
+app.use("/api/superadmin/medicines", medicineMasterRoutes);
+
 /* ══════════════════════════════════════════
    MULTI-TENANT MIDDLEWARE
 ══════════════════════════════════════════ */
@@ -232,6 +237,7 @@ import franchiseFullInventoryRoutes from "./routes/tenant/franchise/fullInventor
 import franchiseLiveRatesRoutes     from "./routes/tenant/franchise/liveRatesRoutes.js";
 import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRoutes.js";
 import franchiseMasterRoutes        from "./routes/tenant/franchise/masterRoutes.js";
+import globalMedicineRoutes         from "./routes/tenant/franchise/globalMedicineRoutes.js";
 // ❌ REMOVED: Tenant supplier routes (deleted - using global suppliers only)
 // import franchiseSupplierRoutesNew   from "./routes/tenant/franchise/supplierRoutes.js";
 
@@ -244,6 +250,7 @@ app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);
 app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
 app.use("/api/franchise/master",      franchiseMasterRoutes);
+app.use("/api/franchise/medicines",   globalMedicineRoutes);
 // ❌ REMOVED: app.use("/api/franchise/suppliers", franchiseSupplierRoutesNew);
 
 // ✅ Supplier orders route for franchise portal (uses global suppliers + tenant POs)

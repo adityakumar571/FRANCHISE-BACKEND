@@ -28,6 +28,16 @@ export const getMedicines = asyncHandler(async (req, res) => {
     withLocation = false,
     rackId = "",
   } = req.query;
+
+  console.log("📋 [GET /api/franchise/medicines] Called with params:", {
+    search,
+    category,
+    formulation,
+    company,
+    status,
+    page,
+    limit,
+  });
   const Medicine = getMedicineModel(req.db);
 
   const filter = {
@@ -55,6 +65,8 @@ export const getMedicines = asyncHandler(async (req, res) => {
   const skip = (Number(page) - 1) * Number(limit);
   const Counter = getCounterModel(req.db);
 
+  console.log("🔍 [getMedicines] Filter object:", filter);
+
   const [meds, total] = await Promise.all([
     Medicine.find(filter)
       .sort({ createdAt: -1 })
@@ -63,6 +75,13 @@ export const getMedicines = asyncHandler(async (req, res) => {
       .lean(),
     Medicine.countDocuments(filter),
   ]);
+
+  console.log("✅ [getMedicines] Query result:", {
+    returned: meds.length,
+    total: total,
+    skip: skip,
+    limit: Number(limit),
+  });
 
   // Get unique category, formulation, company values from medicines (they will be names now)
   const allMeds = await Medicine.find({ isActive: true })
@@ -141,13 +160,13 @@ export const getMedicines = asyncHandler(async (req, res) => {
       isActive: true,
     };
 
-    return {
+    const enriched = {
       _id: m._id,
       name: m.name,
       salt: m.salt,
       genericName: m.genericName,
       strength: m.strength,
-      formulation: formulationObj, // ← Full object
+      formulation: formulationObj,
       category: categoryName,
       company: companyName,
       packSize: m.packSize,
@@ -160,7 +179,7 @@ export const getMedicines = asyncHandler(async (req, res) => {
       barcode: m.barcode,
       imageUrl: m.imageUrl,
       batches: m.batches || [],
-      counterId: counterObj, // ← Full object
+      counterId: counterObj,
       counterName: counterObj?.name || counterObj?.code || "—",
       rackLabel: m.rackLocation?.position || "—",
       rackLocation: m.rackLocation,
@@ -173,6 +192,14 @@ export const getMedicines = asyncHandler(async (req, res) => {
             ? "Low Stock"
             : "In Stock",
     };
+    
+    console.log("🏥 [getMedicines] Enriched medicine record:", enriched);
+    return enriched;
+  });
+
+  console.log("📦 [getMedicines] Result array built:", {
+    count: result.length,
+    firstRecord: result[0]?.name,
   });
 
   // ← Only include categories/formulations/companies + KPI if specifically requested (e.g., for AddMedicine)
@@ -228,6 +255,13 @@ export const getMedicines = asyncHandler(async (req, res) => {
       ...Array.from(uniqueCompanies).sort(),
     ];
   }
+
+  console.log("📤 [getMedicines] Sending response:", {
+    medicinesCount: result.length,
+    total: total,
+    totalPages: Math.ceil(total / Number(limit)),
+    kpi: response.kpi,
+  });
 
   return res
     .status(200)

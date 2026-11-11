@@ -182,17 +182,6 @@ export const addCustomer = asyncHandler(async (req, res) => {
 export const getHoldBills = asyncHandler(async (req, res) => {
   const HoldBill = getHoldBillModel(req.db);
 
-  // Seed dummy hold bills - DISABLED FOR PRODUCTION
-  const count = await HoldBill.countDocuments({ isActive: true });
-  if (count === 0 && false) { // Condition disabled - no dummy hold bills
-    await HoldBill.insertMany([
-      { holdId: 'HB001', customerName: 'Rahul Sharma', items: [{ medicineName: 'Crocin 650 Tablet', qty: 2, mrp: 16, amount: 32 }, { medicineName: 'Pantoprazole 40mg', qty: 1, mrp: 35, amount: 35 }, { medicineName: 'Vitamin D3 60000 IU', qty: 1, mrp: 72, amount: 72 }], subtotal: 139, totalAmt: 139, note: 'Fever Medicine Bill',    isActive: true },
-      { holdId: 'HB002', customerName: 'Priya Verma',  items: [{ medicineName: 'Azithral 500 Tablet', qty: 1, mrp: 85, amount: 85 }, { medicineName: 'Calpol 650 Tablet', qty: 2, mrp: 30, amount: 60 }, { medicineName: 'Omeprazole 20mg', qty: 1, mrp: 35, amount: 35 }, { medicineName: 'Augmentin 625', qty: 1, mrp: 225, amount: 225 }, { medicineName: 'Zincovit Tablet', qty: 2, mrp: 145, amount: 290 }], subtotal: 695, totalAmt: 695, note: "Nid's Medicine Bill",   isActive: true },
-      { holdId: 'HB003', customerName: 'Walk-In',      items: [{ medicineName: 'Dolo 650 Tablet', qty: 2, mrp: 32.5, amount: 65 }, { medicineName: 'Pan-D Tablet', qty: 1, mrp: 92, amount: 92 }], subtotal: 157, totalAmt: 157, note: 'Pain Relief Bill',      isActive: true },
-      { holdId: 'HB004', customerName: 'Amit Kumar',   items: [{ medicineName: 'Metformin 500mg', qty: 3, mrp: 22, amount: 66 }, { medicineName: 'Atorvastatin 10mg', qty: 2, mrp: 45, amount: 90 }, { medicineName: 'Omeprazole 20mg', qty: 1, mrp: 35, amount: 35 }, { medicineName: 'Vitamin D3 60000 IU', qty: 1, mrp: 72, amount: 72 }, { medicineName: 'Amoxicillin 500mg', qty: 2, mrp: 65, amount: 130 }, { medicineName: 'Pantoprazole 40mg', qty: 1, mrp: 55, amount: 55 }], subtotal: 448, totalAmt: 448, note: 'Diabetes Medicine Bill', isActive: true },
-    ]);
-  }
-
   const bills = await HoldBill.find({ isActive: true }).sort({ createdAt: -1 }).lean();
 
   const result = bills.map(b => ({

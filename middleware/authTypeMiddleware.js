@@ -1,8 +1,8 @@
-
 import jwt from "jsonwebtoken";
 import { apiError } from "../utils/apiError.js";
 import { getUserModel } from "../models/tenant/user.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 
 export const verifyJWT = asyncHandler(async (req, res, next) => {
     try {
@@ -63,6 +63,54 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         next();
     } catch (error) {
         console.log('❌ [verifyJWT] Error:', error.message)
+        return apiError(
+            res,
+            401,
+            false,
+            error?.message || "Invalid or expired token"
+        );
+    }
+});
+
+// ── SuperAdmin JWT Verification (Main DB, no tenant context) ──
+export const verifyJWTForSuperAdmin = asyncHandler(async (req, res, next) => {
+    try {
+        const token =
+            req.cookies?.accessToken ||
+            req.header("Authorization")?.replace(/^Bearer\s+/i, "");
+
+        console.log('🔑 [verifyJWTForSuperAdmin] Checking SuperAdmin token...')
+        console.log('   - Cookie accessToken:', !!req.cookies?.accessToken)
+        console.log('   - Authorization header:', !!req.header("Authorization"))
+        console.log('   - Token found:', !!token)
+
+        if (!token) {
+            console.log('❌ [verifyJWTForSuperAdmin] No token provided')
+            return apiError(res, 401, false, "Unauthorized: No token provided");
+        }
+
+        // Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('✅ [verifyJWTForSuperAdmin] Token decoded:', { userId: decoded.userId, role: decoded.role })
+
+        // For SuperAdmin, we just set the decoded data
+        // We don't look up from database (no tenant DB context)
+        req.user = {
+            _id: decoded.userId,
+            role: decoded.role,
+            email: decoded.email,
+        };
+
+        // Check if SuperAdmin role
+        if (decoded.role?.toLowerCase() !== 'superadmin') {
+            console.log('❌ [verifyJWTForSuperAdmin] User is not SuperAdmin, role:', decoded.role)
+            return apiError(res, 403, false, "Forbidden: SuperAdmin access required");
+        }
+
+        console.log('✅ [verifyJWTForSuperAdmin] SuperAdmin verified')
+        next();
+    } catch (error) {
+        console.log('❌ [verifyJWTForSuperAdmin] Error:', error.message)
         return apiError(
             res,
             401,
