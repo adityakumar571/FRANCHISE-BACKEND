@@ -3,6 +3,8 @@ import {
   getGlobalMedicines,
   createGlobalMedicine,
   bulkUploadMedicines,
+  bulkUploadChunk,
+  bulkUploadFinalize,
   getGlobalMedicineById,
   updateGlobalMedicine,
   deleteGlobalMedicine,
@@ -23,8 +25,14 @@ router.get("/", getGlobalMedicines);
 // ── POST create single medicine
 router.post("/", createGlobalMedicine);
 
-// ── POST bulk upload from Excel
+// ── POST bulk upload from Excel (old method - all at once)
 router.post("/bulk-upload", upload.single("file"), bulkUploadMedicines);
+
+// ── POST bulk upload chunk (new method - chunked)
+router.post("/bulk-upload-chunk", upload.single("file"), bulkUploadChunk);
+
+// ── POST bulk upload finalize (assemble & process chunks)
+router.post("/bulk-upload-finalize", bulkUploadFinalize);
 
 // ── GET single medicine
 router.get("/:id", getGlobalMedicineById);

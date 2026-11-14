@@ -2,6 +2,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import session from "express-session";
 import { initializeFirebase } from "./config/firebase.js";
 import compression from "compression";
 
@@ -65,6 +66,19 @@ const app = express();
 app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
+
+/* ── Session Middleware (for chunked uploads) ── */
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24, // 24 hours
+    sameSite: 'lax',
+  },
+}));
 
 /* ── CORS ── */
 const allowedOrigins = (process.env.CLIENT_URL || '')

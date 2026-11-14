@@ -77,10 +77,14 @@ export const verifyJWTForSuperAdmin = asyncHandler(async (req, res, next) => {
     try {
         const token =
             req.cookies?.accessToken ||
+            req.cookies?.multitenant ||  // ADD: Accept multitenant cookie (from Tenant Admin login)
+            req.cookies?.SA_TOKEN ||      // ADD: Accept SA_TOKEN cookie
             req.header("Authorization")?.replace(/^Bearer\s+/i, "");
 
         console.log('🔑 [verifyJWTForSuperAdmin] Checking SuperAdmin token...')
         console.log('   - Cookie accessToken:', !!req.cookies?.accessToken)
+        console.log('   - Cookie multitenant:', !!req.cookies?.multitenant)
+        console.log('   - Cookie SA_TOKEN:', !!req.cookies?.SA_TOKEN)
         console.log('   - Authorization header:', !!req.header("Authorization"))
         console.log('   - Token found:', !!token)
 
