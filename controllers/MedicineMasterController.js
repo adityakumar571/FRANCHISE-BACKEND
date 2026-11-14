@@ -14,12 +14,12 @@ import mongoose from "mongoose";
 
 // ── GET /api/superadmin/medicines?search=&page=&limit=&sortBy=&sortOrder=
 export const getGlobalMedicines = asyncHandler(async (req, res) => {
-  const { 
-    search = "", 
-    page = 1, 
+  const {
+    search = "",
+    page = 1,
     limit = 20,
     sortBy = "createdAt",
-    sortOrder = "desc"
+    sortOrder = "desc",
   } = req.query;
 
   // Validate pagination params
@@ -56,12 +56,7 @@ export const getGlobalMedicines = asyncHandler(async (req, res) => {
   const sortObj = { [sortBy]: sortDir };
 
   const [medicines, total] = await Promise.all([
-    Medicine.find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limitNum)
-      .select("_id medicine_id name generic_name brand_names manufacturer medical_system mrp isActive createdAt")
-      .lean(),
+    Medicine.find(filter).sort(sortObj).skip(skip).limit(limitNum).lean(),
     Medicine.countDocuments(filter),
   ]);
 
@@ -217,7 +212,9 @@ export const createGlobalMedicine = asyncHandler(async (req, res) => {
 // ── POST /api/superadmin/medicines/bulk-upload-chunk (Store chunk)
 export const bulkUploadChunk = asyncHandler(async (req, res) => {
   if (!req.file) {
-    return res.status(400).json(new apiResponse(400, null, "Chunk file required"));
+    return res
+      .status(400)
+      .json(new apiResponse(400, null, "Chunk file required"));
   }
 
   const { chunkIndex, totalChunks, fileName } = req.body;
@@ -232,19 +229,32 @@ export const bulkUploadChunk = asyncHandler(async (req, res) => {
       req.session.uploadChunks = {};
     }
     if (!req.session.uploadChunks[fileName]) {
-      req.session.uploadChunks[fileName] = { chunks: {}, totalChunks: parseInt(totalChunks) };
+      req.session.uploadChunks[fileName] = {
+        chunks: {},
+        totalChunks: parseInt(totalChunks),
+      };
     }
 
     // Store chunk in session
     req.session.uploadChunks[fileName].chunks[chunkIndex] = req.file.buffer;
-    const received = Object.keys(req.session.uploadChunks[fileName].chunks).length;
+    const received = Object.keys(
+      req.session.uploadChunks[fileName].chunks,
+    ).length;
 
-    console.log(`✅ Chunk ${parseInt(chunkIndex) + 1}/${totalChunks} (${received}/${totalChunks})`);
+    console.log(
+      `✅ Chunk ${parseInt(chunkIndex) + 1}/${totalChunks} (${received}/${totalChunks})`,
+    );
 
     // Return 200 - chunk accepted
-    return res.status(200).json(
-      new apiResponse(200, { chunkIndex, totalChunks, received }, "Chunk uploaded"),
-    );
+    return res
+      .status(200)
+      .json(
+        new apiResponse(
+          200,
+          { chunkIndex, totalChunks, received },
+          "Chunk uploaded",
+        ),
+      );
   } catch (error) {
     console.error("❌ Chunk error:", error.message);
     return res.status(500).json(new apiResponse(500, null, error.message));
@@ -256,33 +266,49 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
   const { fileName } = req.body;
 
   if (!fileName) {
-    return res.status(400).json(new apiResponse(400, null, "fileName required"));
+    return res
+      .status(400)
+      .json(new apiResponse(400, null, "fileName required"));
   }
 
   try {
     if (!req.session?.uploadChunks?.[fileName]) {
-      return res.status(400).json(new apiResponse(400, null, "Upload not found"));
+      return res
+        .status(400)
+        .json(new apiResponse(400, null, "Upload not found"));
     }
 
     const uploadData = req.session.uploadChunks[fileName];
-    const chunks = Object.keys(uploadData.chunks).sort((a, b) => parseInt(a) - parseInt(b));
+    const chunks = Object.keys(uploadData.chunks).sort(
+      (a, b) => parseInt(a) - parseInt(b),
+    );
 
     if (chunks.length !== uploadData.totalChunks) {
-      return res.status(400).json(
-        new apiResponse(400, null, `Incomplete: ${chunks.length}/${uploadData.totalChunks}`)
-      );
+      return res
+        .status(400)
+        .json(
+          new apiResponse(
+            400,
+            null,
+            `Incomplete: ${chunks.length}/${uploadData.totalChunks}`,
+          ),
+        );
     }
 
     console.log(`📤 Assembling ${chunks.length} chunks...`);
 
     // Assemble chunks - ensure all are Buffers
-    const buffers = chunks.map(i => {
+    const buffers = chunks.map((i) => {
       const chunk = uploadData.chunks[i];
       // Convert to Buffer if it's not already
       if (Buffer.isBuffer(chunk)) {
         return chunk;
       }
-      if (typeof chunk === 'object' && chunk.data && Array.isArray(chunk.data)) {
+      if (
+        typeof chunk === "object" &&
+        chunk.data &&
+        Array.isArray(chunk.data)
+      ) {
         // If serialized, reconstruct from data array
         return Buffer.from(chunk.data);
       }
@@ -292,11 +318,15 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
 
     const fullBuffer = Buffer.concat(buffers);
 
-    console.log(`✅ Assembled: ${(fullBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    console.log(
+      `✅ Assembled: ${(fullBuffer.length / 1024 / 1024).toFixed(2)}MB`,
+    );
 
     // Parse Excel
     const workbook = xlsx.read(fullBuffer, { type: "buffer" });
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+    const data = xlsx.utils.sheet_to_json(
+      workbook.Sheets[workbook.SheetNames[0]],
+    );
 
     if (!data.length) {
       delete req.session.uploadChunks[fileName];
@@ -309,7 +339,13 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
     }
 
     const Medicine = getMedicineModel(connection);
-    const MEDICAL_SYSTEM_ENUM = ["Allopathy", "Ayurveda", "Homeopathy", "Unani", "Siddha"];
+    const MEDICAL_SYSTEM_ENUM = [
+      "Allopathy",
+      "Ayurveda",
+      "Homeopathy",
+      "Unani",
+      "Siddha",
+    ];
     const REGULATORY_STATUS_ENUM = ["Approved", "Under Review", "Banned"];
 
     // Validate & build medicines array
@@ -331,45 +367,93 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
 
       const mrp = parseFloat(mrpRaw);
       if (isNaN(mrp) || mrp <= 0) {
-        skippedRows.push({ row: rowIndex + 2, reason: `Invalid mrp: "${mrpRaw}"` });
+        skippedRows.push({
+          row: rowIndex + 2,
+          reason: `Invalid mrp: "${mrpRaw}"`,
+        });
         continue;
       }
 
       medicines.push({
         medicine_id: row.medicine_id?.trim(),
         generic_name: genericName,
-        brand_names: row.brand_names ? row.brand_names.split(",").map(b => b.trim()).filter(b => b) : [],
+        brand_names: row.brand_names
+          ? row.brand_names
+              .split(",")
+              .map((b) => b.trim())
+              .filter((b) => b)
+          : [],
         manufacturer: row.manufacturer?.trim(),
-        medical_system: MEDICAL_SYSTEM_ENUM.includes(row.medical_system?.trim()) ? row.medical_system.trim() : "Allopathy",
+        medical_system: MEDICAL_SYSTEM_ENUM.includes(row.medical_system?.trim())
+          ? row.medical_system.trim()
+          : "Allopathy",
         primary_specialty: row.primary_specialty?.trim(),
-        secondary_specialties: row.secondary_specialties ? row.secondary_specialties.split(",").map(s => s.trim()).filter(s => s) : [],
-        patient_conditions: row.patient_conditions ? row.patient_conditions.split(",").map(p => p.trim()).filter(p => p) : [],
+        secondary_specialties: row.secondary_specialties
+          ? row.secondary_specialties
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s)
+          : [],
+        patient_conditions: row.patient_conditions
+          ? row.patient_conditions
+              .split(",")
+              .map((p) => p.trim())
+              .filter((p) => p)
+          : [],
         sub_category: row.sub_category?.trim(),
         indications_symptoms: row.indications_symptoms?.trim(),
         benefits_summary: row.benefits_summary?.trim(),
-        common_side_effects: row.common_side_effects ? row.common_side_effects.split(",").map(s => s.trim()).filter(s => s) : [],
-        contraindications: row.contraindications ? row.contraindications.split(",").map(c => c.trim()).filter(c => c) : [],
-        drug_interactions: row.drug_interactions ? row.drug_interactions.split(",").map(d => d.trim()).filter(d => d) : [],
+        common_side_effects: row.common_side_effects
+          ? row.common_side_effects
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s)
+          : [],
+        contraindications: row.contraindications
+          ? row.contraindications
+              .split(",")
+              .map((c) => c.trim())
+              .filter((c) => c)
+          : [],
+        drug_interactions: row.drug_interactions
+          ? row.drug_interactions
+              .split(",")
+              .map((d) => d.trim())
+              .filter((d) => d)
+          : [],
         dosage_adult: row.dosage_adult?.trim(),
         dosage_pediatric: row.dosage_pediatric?.trim(),
         pregnancy_category: row.pregnancy_category?.trim(),
         storage_conditions: row.storage_conditions?.trim(),
         expiry_months: parseInt(row.expiry_months) || undefined,
         vet_safe: row.vet_safe?.toLowerCase() === "yes",
-        keywords_synonyms: row.keywords_synonyms ? row.keywords_synonyms.split(",").map(k => k.trim()).filter(k => k) : [],
-        regulatory_status: REGULATORY_STATUS_ENUM.includes(row.regulatory_status?.trim()) ? row.regulatory_status.trim() : "Approved",
+        keywords_synonyms: row.keywords_synonyms
+          ? row.keywords_synonyms
+              .split(",")
+              .map((k) => k.trim())
+              .filter((k) => k)
+          : [],
+        regulatory_status: REGULATORY_STATUS_ENUM.includes(
+          row.regulatory_status?.trim(),
+        )
+          ? row.regulatory_status.trim()
+          : "Approved",
         source: row.source?.trim(),
         notes: row.notes?.trim(),
         name: genericName,
         genericName,
-        brand: row.brand_names ? row.brand_names.split(",")[0].trim() : undefined,
+        brand: row.brand_names
+          ? row.brand_names.split(",")[0].trim()
+          : undefined,
         strength: row.strength?.trim(),
         formulation: row.formulation?.trim(),
         category: row.sub_category?.trim(),
         company: row.manufacturer?.trim(),
         mrp,
-        requiresPrescription: row.prescription_required?.toLowerCase() === "yes",
-        prescription_required: row.prescription_required?.toLowerCase() === "yes",
+        requiresPrescription:
+          row.prescription_required?.toLowerCase() === "yes",
+        prescription_required:
+          row.prescription_required?.toLowerCase() === "yes",
         isGlobal: true,
         isActive: true,
         createdBy: req.user?._id,
@@ -379,11 +463,15 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
     if (!medicines.length) {
       delete req.session.uploadChunks[fileName];
       return res.status(201).json(
-        new apiResponse(201, {
-          uploaded_count: 0,
-          total_count: data.length,
-          skipped_count: data.length,
-        }, "No valid medicines"),
+        new apiResponse(
+          201,
+          {
+            uploaded_count: 0,
+            total_count: data.length,
+            skipped_count: data.length,
+          },
+          "No valid medicines",
+        ),
       );
     }
 
@@ -401,7 +489,9 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
       try {
         const result = await Medicine.insertMany(batch, { ordered: false });
         insertedCount += result.length;
-        console.log(`✅ Batch ${batchNum}/${totalBatches}: ${result.length}/${batch.length}`);
+        console.log(
+          `✅ Batch ${batchNum}/${totalBatches}: ${result.length}/${batch.length}`,
+        );
       } catch (batchError) {
         if (batchError.code === 11000 && batchError.result?.insertedIds) {
           insertedCount += batchError.result.insertedIds.length;
@@ -409,7 +499,7 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
       }
 
       if (batchNum % 5 === 0 && batchNum < totalBatches) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
@@ -418,12 +508,16 @@ export const bulkUploadFinalize = asyncHandler(async (req, res) => {
     console.log(`✅ Complete: ${insertedCount} inserted`);
 
     return res.status(201).json(
-      new apiResponse(201, {
-        uploaded_count: insertedCount,
-        total_count: data.length,
-        skipped_count: skippedRows.length,
-        skipped_details: skippedRows.slice(0, 10),
-      }, `✅ ${insertedCount}/${data.length} uploaded`),
+      new apiResponse(
+        201,
+        {
+          uploaded_count: insertedCount,
+          total_count: data.length,
+          skipped_count: skippedRows.length,
+          skipped_details: skippedRows.slice(0, 10),
+        },
+        `✅ ${insertedCount}/${data.length} uploaded`,
+      ),
     );
   } catch (error) {
     console.error("❌ Error:", error.message);
@@ -445,18 +539,26 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
   if (req.file.size > MAX_FILE_SIZE) {
     return res
       .status(413)
-      .json(new apiResponse(413, null, `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`));
+      .json(
+        new apiResponse(
+          413,
+          null,
+          `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+        ),
+      );
   }
 
   try {
-    console.log(`📥 Processing file: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)}MB)`);
+    console.log(
+      `📥 Processing file: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)}MB)`,
+    );
 
     // Read from memory buffer (memoryStorage)
     const buffer = req.file.buffer;
     const workbook = xlsx.read(buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    
+
     // Use stream-like reading for large files
     const data = xlsx.utils.sheet_to_json(worksheet);
 
@@ -638,7 +740,9 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
 
       parsedCount++;
       if (parsedCount % PARSE_CHUNK_SIZE === 0) {
-        console.log(`✅ Parsed ${parsedCount}/${data.length} rows (${((parsedCount / data.length) * 100).toFixed(1)}%)`);
+        console.log(
+          `✅ Parsed ${parsedCount}/${data.length} rows (${((parsedCount / data.length) * 100).toFixed(1)}%)`,
+        );
       }
     }
 
@@ -666,20 +770,22 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
     const duplicateSkipped = [];
     const totalBatches = Math.ceil(medicines.length / BATCH_SIZE);
 
-    console.log(`🔄 Starting batch processing: ${totalBatches} batches of ${BATCH_SIZE} records`);
+    console.log(
+      `🔄 Starting batch processing: ${totalBatches} batches of ${BATCH_SIZE} records`,
+    );
 
     for (let i = 0; i < medicines.length; i += BATCH_SIZE) {
       const batch = medicines.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      
+
       try {
         // Insert with ordered: false to continue on duplicate
         const result = await Medicine.insertMany(batch, { ordered: false });
         insertedCount += result.length;
-        
+
         const progress = ((batchNum / totalBatches) * 100).toFixed(1);
         console.log(
-          `✅ Batch ${batchNum}/${totalBatches} (${progress}%): Inserted ${result.length}/${batch.length}`
+          `✅ Batch ${batchNum}/${totalBatches} (${progress}%): Inserted ${result.length}/${batch.length}`,
         );
       } catch (batchError) {
         if (batchError.code === 11000) {
@@ -693,7 +799,9 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
               skipped_due_to_duplicate: skipped,
               message: `${inserted} inserted, ${skipped} duplicates skipped`,
             });
-            console.log(`⚠️  Batch ${batchNum}: ${inserted} inserted, ${skipped} duplicates`);
+            console.log(
+              `⚠️  Batch ${batchNum}: ${inserted} inserted, ${skipped} duplicates`,
+            );
           } else {
             duplicateSkipped.push({
               batch: batchNum,
@@ -724,8 +832,10 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
 
       // Pause every 5 batches for stability
       if (batchNum % 5 === 0 && batchNum < totalBatches) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        console.log(`⏸️  Batch ${batchNum}: System pause (database stabilization)`);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        console.log(
+          `⏸️  Batch ${batchNum}: System pause (database stabilization)`,
+        );
       }
     }
 
@@ -755,13 +865,15 @@ export const bulkUploadMedicines = asyncHandler(async (req, res) => {
       ✓ Duplicate Skipped: ${duplicateSkipped.reduce((sum, b) => sum + b.skipped_due_to_duplicate, 0)}
       ✓ Other Errors: ${insertErrors.length}`);
 
-    return res.status(201).json(
-      new apiResponse(
-        201,
-        summary,
-        `✅ ${insertedCount}/${data.length} medicines uploaded successfully`,
-      ),
-    );
+    return res
+      .status(201)
+      .json(
+        new apiResponse(
+          201,
+          summary,
+          `✅ ${insertedCount}/${data.length} medicines uploaded successfully`,
+        ),
+      );
   } catch (error) {
     console.error("❌ Bulk upload error:", error);
     return res

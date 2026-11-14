@@ -123,16 +123,33 @@ const loginValidationRules = [
     .withMessage('Password is required')
 ]
 
-// Medicine validation
+// Medicine validation - Extended to support full supplier inventory
 const medicineValidationRules = [
+  // Required fields
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
     .withMessage('Medicine name must be between 2 and 100 characters'),
   
-  body('category')
-    .isIn(['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Other'])
-    .withMessage('Please select a valid category'),
+  body('generic_name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Generic name must be between 2 and 100 characters'),
+  
+  body('manufacturer')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Manufacturer must be between 2 and 100 characters'),
+  
+  body('strength')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Strength is required'),
+  
+  body('packSize')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Pack size is required'),
   
   body('mrp')
     .isNumeric()
@@ -148,7 +165,20 @@ const medicineValidationRules = [
   
   body('stock')
     .isInt({ min: 0 })
-    .withMessage('Stock must be a positive integer')
+    .withMessage('Stock must be a positive integer'),
+  
+  // Optional fields (still accept them if provided)
+  body('medicine_id').optional(),
+  body('category').optional(),
+  body('medical_system').optional(),
+  body('minOrderQuantity').optional().isInt({ min: 1 }),
+  body('scheme').optional(),
+  body('description').optional(),
+  body('isAvailable').optional().isBoolean(),
+  body('expiryDate').optional(),
+  body('brand_names').optional().isArray(),
+  body('formulation').optional(),
+  body('primary_specialty').optional(),
 ]
 
 // ===== PUBLIC ROUTES (No Authentication) =====

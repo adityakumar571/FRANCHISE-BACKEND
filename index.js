@@ -252,6 +252,7 @@ import franchiseLiveRatesRoutes     from "./routes/tenant/franchise/liveRatesRou
 import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRoutes.js";
 import franchiseMasterRoutes        from "./routes/tenant/franchise/masterRoutes.js";
 import globalMedicineRoutes         from "./routes/tenant/franchise/globalMedicineRoutes.js";
+import franchiseRackAssignmentRoutes from "./routes/tenant/franchise/rackAssignmentRoutes.js";
 // ❌ REMOVED: Tenant supplier routes (deleted - using global suppliers only)
 // import franchiseSupplierRoutesNew   from "./routes/tenant/franchise/supplierRoutes.js";
 
@@ -265,6 +266,7 @@ app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
 app.use("/api/franchise/master",      franchiseMasterRoutes);
 app.use("/api/franchise/medicines",   globalMedicineRoutes);
+app.use("/api/franchise/racks",       franchiseRackAssignmentRoutes);  // ✅ Rack assignment routes
 // ❌ REMOVED: app.use("/api/franchise/suppliers", franchiseSupplierRoutesNew);
 
 // ✅ Supplier orders route for franchise portal (uses global suppliers + tenant POs)

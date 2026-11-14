@@ -153,8 +153,7 @@ const MedicineSchema = new mongoose.Schema(
       default: null,
       sparse: true,
       index: true,
-    }, // Reference to global medicine (in main DB) if imported from global
-
+    },
     isLinkedToGlobal: {
       type: Boolean,
       default: false,

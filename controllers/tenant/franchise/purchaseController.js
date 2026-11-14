@@ -8,6 +8,8 @@ import { getPurchaseReturnModel } from '../../../models/tenant/franchise/Purchas
 import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.model.js';
 import { getMedicineBatchModel } from '../../../models/tenant/franchise/MedicineBatch.model.js';
 import { getSupplierModel } from '../../../models/tenant/franchise/Supplier.model.js';
+import { getRackConfigModel } from '../../../models/tenant/franchise/RackConfig.model.js';
+import { getRackAssignmentModel } from '../../../models/tenant/franchise/RackAssignment.model.js';
 import Supplier from '../../../models/Supplier.model.js'; // ← GLOBAL Supplier Model (where medicines are stored)
 
 
@@ -380,33 +382,334 @@ export const getGRNList = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// POST /api/franchise/grn  — Create GRN + update stock
+// POST /api/franchise/purchase/grn/quick-create — Auto create GRN from PO
+// (No items data needed - auto-loads from PO)
+// ────────────────────────────────────────────────────────────────────────────
+export const quickCreateGRN = asyncHandler(async (req, res) => {
+  const { poId } = req.body
+  if (!poId) return res.status(400).json(new apiResponse(400, null, 'PO ID required'))
+
+  const GRN = getGRNModel(req.db)
+  const PurchaseOrder = getPurchaseOrderModel(req.db)
+
+  // Fetch PO
+  const po = await PurchaseOrder.findById(poId)
+  if (!po) return res.status(404).json(new apiResponse(404, null, 'PO not found'))
+
+  // Create GRN with all PO items (status: pending_assignment)
+  const count = await GRN.countDocuments()
+  const grnNo = `GRN-${String(count + 1051).padStart(4, '0')}`
+
+  const grnData = {
+    grnNo,
+    supplierId: po.supplierId,
+    supplier: po.supplier,
+    poRef: po.poNo,
+    poId: po._id,
+    items: (po.items || []).map(item => ({
+      medicineId: item.medicineId,
+      medicineName: item.medicineName,
+      poOrderedQty: item.orderedQty || 0,
+      grnReceivedQty: item.orderedQty || 0,  // Default: receive all
+      grnRejectedQty: 0,
+      batchNo: '',  // ← Empty - staff will fill during assignment
+      expiryDate: null,  // ← Empty - staff will fill during assignment
+      qcStatus: 'pending',
+      ptr: item.ptr,
+      mrp: item.mrp,
+    })),
+    status: 'pending_assignment',  // ← New status: waiting for counter/rack assignment
+    receivedDate: new Date(),
+  }
+
+  const grn = await GRN.create(grnData)
+
+  console.log(`✅ Quick GRN Created: ${grn.grnNo} with ${grn.items.length} items (pending assignment)`)
+
+  return res.status(201).json(new apiResponse(201, {
+    _id: grn._id,
+    grnNo: grn.grnNo,
+    itemCount: grn.items.length,
+    status: grn.status,
+    message: 'GRN created. Now assign counter/rack for each medicine.',
+  }, 'Quick GRN created'))
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// PUT /api/franchise/purchase/grn/:id/assign-all — Bulk assign medicines to positions
+// Completes the GRN assignment
+// ────────────────────────────────────────────────────────────────────────────
+export const assignMedicinesToRacks = asyncHandler(async (req, res) => {
+  const { assignments } = req.body  // [{ itemIndex, medicineId, batchNo, expiryDate, counterId, rackId, shelf, row, column }, ...]
+  const grnId = req.params.id
+
+  if (!assignments || !Array.isArray(assignments)) {
+    return res.status(400).json(new apiResponse(400, null, 'Assignments array required'))
+  }
+
+  const GRN = getGRNModel(req.db)
+  const RackAssignment = getRackAssignmentModel(req.db)
+  const Medicine = getMedicineModel(req.db)
+  const PurchaseOrder = getPurchaseOrderModel(req.db)
+
+  // Fetch GRN
+  const grn = await GRN.findById(grnId)
+  if (!grn) return res.status(404).json(new apiResponse(404, null, 'GRN not found'))
+
+  // Update GRN items with batch/expiry + create RackAssignments
+  const updatedItems = [...grn.items]
+  const rackAssignmentsToCreate = []
+
+  for (const assign of assignments) {
+    const { itemIndex, medicineId, batchNo, expiryDate, counterId, rackId, shelf, row, column } = assign
+
+    if (itemIndex < 0 || itemIndex >= updatedItems.length) continue
+
+    const item = updatedItems[itemIndex]
+
+    // Update GRN item with batch/expiry
+    item.batchNo = batchNo
+    item.expiryDate = expiryDate
+    item.qcStatus = 'assigned'
+
+    // Prepare RackAssignment
+    const position = `${counterId}>${rackId}>${shelf}-${row}-${column}`
+    rackAssignmentsToCreate.push({
+      franchiseId: req.user?._id || req.user?.id,
+      medicineId,
+      medicineName: item.medicineName,
+      batchNo,
+      counterId,
+      rackId,
+      shelf,
+      row,
+      column,
+      position,
+      assignedVia: 'manual',
+      assignedBy: req.user?._id,
+      grnId: grn._id,
+      isActive: true,
+    })
+  }
+
+  // Save updated GRN
+  grn.items = updatedItems
+  grn.status = 'assigned'
+  await grn.save()
+
+  // Create RackAssignments (bulk)
+  if (rackAssignmentsToCreate.length > 0) {
+    await RackAssignment.insertMany(rackAssignmentsToCreate, { ordered: false })
+  }
+
+  // Update Medicine stock + batches
+  for (const item of grn.items) {
+    if (!item.medicineName || item.grnReceivedQty <= 0) continue
+
+    const med = await Medicine.findOne({
+      name: new RegExp(`^${item.medicineName}$`, 'i'),
+      isActive: true,
+    })
+    if (!med) continue
+
+    const newBatch = {
+      batchNo: item.batchNo,
+      expiryDate: new Date(item.expiryDate),
+      quantity: item.grnReceivedQty,
+      availableQty: item.grnReceivedQty,
+      mrp: item.mrp || 0,
+      purchasePrice: item.ptr || 0,
+      supplierName: grn.supplier,
+      purchaseDate: new Date(),
+      isActive: true,
+    }
+
+    const existingBatchIndex = med.batches.findIndex(
+      b => b.batchNo === item.batchNo && new Date(b.expiryDate).getTime() === new Date(item.expiryDate).getTime()
+    )
+
+    if (existingBatchIndex !== -1) {
+      med.batches[existingBatchIndex].quantity += item.grnReceivedQty
+      med.batches[existingBatchIndex].availableQty += item.grnReceivedQty
+    } else {
+      med.batches.push(newBatch)
+    }
+
+    const calculatedStock = med.batches.reduce((sum, batch) => {
+      const qty = batch.availableQty !== undefined ? batch.availableQty : batch.quantity
+      return sum + (batch.isActive !== false ? qty : 0)
+    }, 0)
+
+    med.currentStock = calculatedStock
+    await med.save()
+  }
+
+  // Update PO status if linked
+  if (grn.poId) {
+    const po = await PurchaseOrder.findById(grn.poId)
+    if (po) {
+      po.status = 'received'
+      po.totalReceivedQty = (po.items || []).reduce((s, it) => s + (it.orderedQty || 0), 0)
+      po.completionPct = 100
+      po.lastGRNDate = new Date()
+      if (!po.grns) po.grns = []
+      if (!po.grns.includes(grn._id)) po.grns.push(grn._id)
+      await po.save()
+    }
+  }
+
+  console.log(`✅ GRN ${grn.grnNo} assigned: ${rackAssignmentsToCreate.length} medicines positioned`)
+
+  return res.status(200).json(new apiResponse(200, {
+    grnNo: grn.grnNo,
+    status: grn.status,
+    assignedCount: rackAssignmentsToCreate.length,
+  }, 'All medicines assigned'))
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/franchise/purchase/grn  — Create GRN + update stock + UPDATE PO STATUS
 // ────────────────────────────────────────────────────────────────────────────
 export const createGRN = asyncHandler(async (req, res) => {
-  const { supplierId, supplier, poRef, invoiceNo, invoiceDate, items } = req.body;
+  const { supplierId, supplier, poId, poRef, invoiceNo, invoiceDate, items } = req.body;
   if (!supplier || !items?.length) return res.status(400).json(new apiResponse(400, null, 'Supplier and items required'));
+
+  // Batch/Expiry validation (MANDATORY)
+  const missingBatchOrExpiry = items.some(item => !item.batchNo || !item.expiryDate);
+  if (missingBatchOrExpiry) {
+    return res.status(400).json(new apiResponse(400, null, 'Batch number and expiry date are mandatory for all items'));
+  }
 
   const GRN           = getGRNModel(req.db);
   const Medicine      = getMedicineModel(req.db);
   const MedicineBatch = getMedicineBatchModel(req.db);
+  const PurchaseOrder = getPurchaseOrderModel(req.db);
+
+  // Import helper functions
+  const { 
+    updatePOItemQuantities, 
+    calculatePOTotals, 
+    determinePOStatus, 
+    isBackordered,
+    generateBackorderNote 
+  } = await import('../../../utils/poStatusHelper.js').then(m => ({
+    updatePOItemQuantities: m.updatePOItemQuantities,
+    calculatePOTotals: m.calculatePOTotals,
+    determinePOStatus: m.determinePOStatus,
+    isBackordered: m.isBackordered,
+    generateBackorderNote: m.generateBackorderNote,
+  }));
 
   const count    = await GRN.countDocuments();
   const grnNo    = `GRN-${String(count + 1051).padStart(4, '0')}`;
-  const totalAmt = items.reduce((s, i) => s + (i.qty * i.ptr || 0), 0);
+  
+  // Use grnReceivedQty (not qty) for amount calculation
+  const totalAmt = items.reduce((s, i) => s + ((i.grnReceivedQty || i.qty || 0) * (i.ptr || 0)), 0);
 
-  const grn = await GRN.create({
-    grnNo, supplierId, supplier, poRef, invoiceNo,
+  const grnData = {
+    grnNo,
+    supplierId,
+    supplier,
+    poRef,
+    poId: poId || undefined,  // Link to PO if provided
+    invoiceNo,
     invoiceDate: invoiceDate ? new Date(invoiceDate) : new Date(),
-    items, totalAmt, status: 'completed',
-  });
+    items,
+    totalAmount: totalAmt,  // Changed from totalAmt
+    status: 'completed',
+  };
+
+  const grn = await GRN.create(grnData);
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // UPDATE PO STATUS IF PO LINKED
+  // ────────────────────────────────────────────────────────────────────────────
+  if (poId) {
+    const po = await PurchaseOrder.findById(poId);
+    if (po) {
+      // Update PO items with received/rejected quantities
+      const updatedItems = updatePOItemQuantities(po.items, items);
+      
+      // Calculate totals
+      const totals = calculatePOTotals(updatedItems);
+      
+      // Determine backorder status
+      const backordered = isBackordered(po.createdAt, po.lastGRNDate, totals.completionPct);
+      
+      // Determine new status
+      let newStatus = determinePOStatus(totals.completionPct, po.lastGRNDate, backordered);
+      
+      // Update PO
+      po.items = updatedItems;
+      po.totalOrderedQty = totals.totalOrderedQty;
+      po.totalReceivedQty = totals.totalReceivedQty;
+      po.totalRejectedQty = totals.totalRejectedQty;
+      po.completionPct = totals.completionPct;
+      po.status = newStatus;
+      po.lastGRNDate = new Date();
+      po.backorderStatus = backordered ? 'delayed' : 'none';
+      po.backorderNote = generateBackorderNote(updatedItems, supplier);
+      
+      // Add GRN reference
+      if (!po.grns) po.grns = [];
+      po.grns.push(grn._id);
+      
+      await po.save();
+      
+      console.log(`✅ PO Updated: ${po.poNo} → Status: ${newStatus} (${totals.completionPct}% received)`);
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // AUTO-ASSIGN MEDICINES TO COUNTER/RACK/POSITION
+  // ────────────────────────────────────────────────────────────────────────────
+  const RackConfig = getRackConfigModel(req.db);
+  const RackAssignment = getRackAssignmentModel(req.db);
+  const franchiseId = req.user?._id || req.user?.id;
+
+  let rackConfig = await RackConfig.findOne({ franchiseId: franchiseId }).lean();
+  if (!rackConfig) {
+    // Create default config if not exists
+    await RackConfig.create({
+      franchiseId,
+      enableAutoAssign: true,
+      autoAssignStrategy: 'round-robin',
+      defaultCounterId: 'Counter-1',
+      defaultRackId: 'RACK-A',
+      totalSlots: 2500,
+      counters: [
+        {
+          counterId: 'Counter-1',
+          counterName: 'Main Counter',
+          defaultRackId: 'RACK-A',
+          shelfCount: 10,
+          rowCount: 5,
+          colCount: 20,
+          nextShelf: 1,
+          nextRow: 'A',
+          nextColumn: 1,
+          isActive: true,
+        },
+      ],
+    });
+    rackConfig = await RackConfig.findOne({ franchiseId }).lean();
+  }
+
+  // Import auto-assignment helpers
+  const { getNextAvailablePosition } = await import('../../../utils/rackAutoAssignment.js').then(m => ({
+    getNextAvailablePosition: m.getNextAvailablePosition,
+  }));
 
   // Update medicine stock + push batch into Medicine.batches[] for FIFO/expiry tracking
   for (const item of items) {
     if (!item.medicineName) continue;
 
-    const totalQty = Number(item.qty) + Number(item.freeQty || 0);
-    const expiryDate = item.expiry
-      ? new Date(`${item.expiry}-01`)
+    // Use grnReceivedQty (not rejected) for stock addition
+    const totalQty = Number(item.grnReceivedQty || item.qty || 0);
+    if (totalQty <= 0) continue; // Skip if no qty received
+
+    const expiryDate = item.expiryDate
+      ? new Date(item.expiryDate)
       : new Date(Date.now() + 365 * 86400000);
 
     // Find medicine by name
@@ -470,9 +773,50 @@ export const createGRN = asyncHandler(async (req, res) => {
         isActive:      true,
       });
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // AUTO-ASSIGN TO RACK/POSITION
+    // ──────────────────────────────────────────────────────────────────────
+    if (rackConfig?.enableAutoAssign && franchiseId) {
+      try {
+        const position = getNextAvailablePosition(
+          rackConfig,
+          rackConfig.autoAssignStrategy || 'round-robin',
+          med.category
+        );
+
+        // Create rack assignment
+        await RackAssignment.create({
+          franchiseId,
+          medicineId: med._id,
+          medicineName: item.medicineName,
+          batchNo: item.batchNo || null,
+          counterId: position.counterId,
+          rackId: position.rackId,
+          shelf: position.shelf,
+          row: position.row,
+          column: position.column,
+          position: position.position,
+          assignedVia: 'auto',
+          assignedBy: franchiseId,
+          grnId: grn._id,
+          isActive: true,
+        });
+
+        console.log(`✅ Auto-assigned: ${item.medicineName} (Batch: ${item.batchNo}) → ${position.position}`);
+      } catch (assignErr) {
+        // Log but don't fail GRN creation if auto-assignment fails
+        console.error(`⚠️  Auto-assignment failed for ${item.medicineName}:`, assignErr.message);
+      }
+    }
   }
 
-  return res.status(201).json(new apiResponse(201, { _id: grn._id, grnNo: grn.grnNo }, 'GRN created and stock updated'));
+  return res.status(201).json(new apiResponse(201, { 
+    _id: grn._id, 
+    grnNo: grn.grnNo,
+    poStatus: poId ? 'updated' : 'not_linked',
+    autoAssigned: rackConfig?.enableAutoAssign || false,
+  }, 'GRN created and stock updated'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -859,4 +1203,52 @@ export const getSupplierLedgerSummary = asyncHandler(async (req, res) => {
   summary.sort((a, b) => b.outstanding - a.outstanding);
 
   return res.status(200).json(new apiResponse(200, summary, 'Supplier ledger summary fetched'));
+});
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/purchase/supplier/:supplierId/medicines
+// Get all medicines from a specific supplier (for bulk PO creation)
+// ────────────────────────────────────────────────────────────────────────────
+export const getSupplierMedicines = asyncHandler(async (req, res) => {
+  const { supplierId } = req.params;
+
+  // Fetch supplier from global Supplier model (where medicines are stored)
+  const supplier = await Supplier.findById(supplierId).lean();
+  
+  if (!supplier) {
+    return res.status(404).json(new apiResponse(404, null, 'Supplier not found'));
+  }
+
+  if (!supplier.medicines || supplier.medicines.length === 0) {
+    return res.status(200).json(new apiResponse(200, { medicines: [] }, 'Supplier has no medicines'));
+  }
+
+  // Format medicines for frontend
+  const medicines = supplier.medicines
+    .filter(m => m.isAvailable && m.stock > 0) // Only available medicines with stock
+    .map(m => ({
+      _id: m._id,
+      name: m.name,
+      genericName: m.genericName || '',
+      manufacturer: m.manufacturer || '',
+      category: m.category,
+      strength: m.strength || '',
+      packSize: m.packSize || '',
+      batchNumber: m.batchNumber,
+      expiryDate: m.expiryDate,
+      mrp: m.mrp,
+      supplierPrice: m.supplierPrice, // Supplier's selling price to franchise
+      discount: m.discount || 0,
+      stock: m.stock,
+      minStock: m.minStock || 0,
+      description: m.description || '',
+    }));
+
+  return res.status(200).json(new apiResponse(200, { 
+    supplierId: supplier._id,
+    supplierName: supplier.companyName,
+    medicines,
+    totalMedicines: medicines.length,
+  }, 'Supplier medicines fetched successfully'));
 });
