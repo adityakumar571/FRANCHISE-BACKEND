@@ -9,6 +9,8 @@ import {
   updatePurchaseOrderStatus,
   getGRNList,
   createGRN,
+  quickCreateGRN,
+  assignMedicinesToRacks,
   getGRNById,
   getPurchaseReturns,
   createPurchaseReturn,
@@ -16,6 +18,7 @@ import {
   getPurchaseSupplierLedger,
   getPurchaseLiveRate,
   debugSuppliers,
+  getSupplierMedicines,
 } from '../../../controllers/tenant/franchise/purchaseController.js';
 
 const router = express.Router();
@@ -34,7 +37,12 @@ router.put('/orders/:id/status',       updatePurchaseOrderStatus);
 // GRN
 router.get('/grn',                     getGRNList);
 router.post('/grn',                    createGRN);
+router.post('/grn/quick-create',       quickCreateGRN);           // ← NEW: Auto create GRN
+router.put('/grn/:id/assign-all',      assignMedicinesToRacks);   // ← NEW: Bulk assign
 router.get('/grn/:id',                 getGRNById);
+
+// Supplier Medicines (for bulk PO creation)
+router.get('/supplier/:supplierId/medicines', getSupplierMedicines);
 
 // Purchase Returns
 router.get('/returns',                 getPurchaseReturns);

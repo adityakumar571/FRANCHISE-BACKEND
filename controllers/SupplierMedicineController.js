@@ -131,11 +131,48 @@ class SupplierMedicineController {
         return apiError(res, 404, false, 'Supplier not found')
       }
 
+      // Valid categories for Supplier medicines
+      const validCategories = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Powder', 'Suspension', 'Gel', 'Lotion', 'Spray', 'Inhaler', 'Other'];
+      
+      // Map category to valid enum, default to 'Other' if not in list
+      let category = req.body.category || 'Other';
+      if (!validCategories.includes(category)) {
+        // Try to infer from formulation
+        if (req.body.formulation && validCategories.includes(req.body.formulation)) {
+          category = req.body.formulation;
+        } else {
+          category = 'Other';
+        }
+      }
+
+      // Convert snake_case to camelCase for database schema compatibility
       const medicineData = {
-        ...req.body,
+        name: req.body.name,
+        genericName: req.body.generic_name || req.body.genericName,
+        manufacturer: req.body.manufacturer,
+        category: category,
+        strength: req.body.strength,
+        packSize: req.body.packSize || req.body.pack_size,
+        mrp: req.body.mrp,
+        supplierPrice: req.body.supplierPrice || req.body.supplier_price,
+        stock: req.body.stock,
+        // Optional fields
+        medicine_id: req.body.medicine_id,
+        medical_system: req.body.medical_system,
+        minOrderQuantity: req.body.minOrderQuantity || req.body.min_order_quantity || 1,
+        scheme: req.body.scheme,
+        description: req.body.description,
+        isAvailable: req.body.isAvailable !== false,
+        expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : undefined,
+        batchNumber: req.body.batchNumber,
+        discount: req.body.discount || 0,
+        minStock: req.body.minStock || 10,
         addedAt: new Date(),
         updatedAt: new Date()
       }
+
+      // Remove undefined fields
+      Object.keys(medicineData).forEach(key => medicineData[key] === undefined && delete medicineData[key])
 
       supplier.medicines.push(medicineData)
       await supplier.save()
@@ -177,8 +214,48 @@ class SupplierMedicineController {
         return apiError(res, 404, false, 'Medicine not found')
       }
 
-      // Update medicine fields
-      Object.assign(medicine, req.body)
+      // Valid categories for Supplier medicines
+      const validCategories = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 'Powder', 'Suspension', 'Gel', 'Lotion', 'Spray', 'Inhaler', 'Other'];
+      
+      // Map category to valid enum if provided
+      let category = req.body.category || medicine.category;
+      if (req.body.category && !validCategories.includes(req.body.category)) {
+        if (req.body.formulation && validCategories.includes(req.body.formulation)) {
+          category = req.body.formulation;
+        } else {
+          category = 'Other';
+        }
+      }
+
+      // Convert snake_case to camelCase for database schema compatibility
+      const updateData = {
+        name: req.body.name || medicine.name,
+        genericName: req.body.generic_name || req.body.genericName || medicine.genericName,
+        manufacturer: req.body.manufacturer || medicine.manufacturer,
+        category: category,
+        strength: req.body.strength || medicine.strength,
+        packSize: req.body.packSize || req.body.pack_size || medicine.packSize,
+        mrp: req.body.mrp || medicine.mrp,
+        supplierPrice: req.body.supplierPrice || req.body.supplier_price || medicine.supplierPrice,
+        stock: req.body.stock !== undefined ? req.body.stock : medicine.stock,
+        // Optional fields
+        medical_system: req.body.medical_system,
+        minOrderQuantity: req.body.minOrderQuantity || req.body.min_order_quantity,
+        scheme: req.body.scheme,
+        description: req.body.description,
+        isAvailable: req.body.isAvailable !== undefined ? req.body.isAvailable : medicine.isAvailable,
+        expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : medicine.expiryDate,
+        batchNumber: req.body.batchNumber,
+        discount: req.body.discount !== undefined ? req.body.discount : medicine.discount,
+        minStock: req.body.minStock,
+      }
+
+      // Update medicine fields (exclude undefined values)
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== undefined) {
+          medicine[key] = updateData[key]
+        }
+      })
       medicine.updatedAt = new Date()
 
       await supplier.save()

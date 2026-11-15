@@ -2,6 +2,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import session from "express-session";
 import { initializeFirebase } from "./config/firebase.js";
 import compression from "compression";
 
@@ -65,6 +66,19 @@ const app = express();
 app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
+
+/* ── Session Middleware (for chunked uploads) ── */
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24, // 24 hours
+    sameSite: 'lax',
+  },
+}));
 
 /* ── CORS ── */
 const allowedOrigins = (process.env.CLIENT_URL || '')
@@ -238,6 +252,7 @@ import franchiseLiveRatesRoutes     from "./routes/tenant/franchise/liveRatesRou
 import franchiseRemainingRoutes     from "./routes/tenant/franchise/remainingRoutes.js";
 import franchiseMasterRoutes        from "./routes/tenant/franchise/masterRoutes.js";
 import globalMedicineRoutes         from "./routes/tenant/franchise/globalMedicineRoutes.js";
+import franchiseRackAssignmentRoutes from "./routes/tenant/franchise/rackAssignmentRoutes.js";
 // ❌ REMOVED: Tenant supplier routes (deleted - using global suppliers only)
 // import franchiseSupplierRoutesNew   from "./routes/tenant/franchise/supplierRoutes.js";
 
@@ -251,6 +266,7 @@ app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
 app.use("/api/franchise/master",      franchiseMasterRoutes);
 app.use("/api/franchise/medicines",   globalMedicineRoutes);
+app.use("/api/franchise/racks",       franchiseRackAssignmentRoutes);  // ✅ Rack assignment routes
 // ❌ REMOVED: app.use("/api/franchise/suppliers", franchiseSupplierRoutesNew);
 
 // ✅ Supplier orders route for franchise portal (uses global suppliers + tenant POs)
