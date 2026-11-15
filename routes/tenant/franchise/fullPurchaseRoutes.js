@@ -9,6 +9,8 @@ import {
   updatePurchaseOrderStatus,
   getGRNList,
   createGRN,
+  createSimpleGRN,
+  completeGRNAssignment,
   quickCreateGRN,
   assignMedicinesToRacks,
   getGRNById,
@@ -37,6 +39,8 @@ router.put('/orders/:id/status',       updatePurchaseOrderStatus);
 // GRN
 router.get('/grn',                     getGRNList);
 router.post('/grn',                    createGRN);
+router.post('/grn/simple',             createSimpleGRN);          // ← NEW: Simple GRN (qty only)
+router.post('/grn/:grnId/complete',    completeGRNAssignment);    // ← NEW: Complete with batch/expiry/racks
 router.post('/grn/quick-create',       quickCreateGRN);           // ← NEW: Auto create GRN
 router.put('/grn/:id/assign-all',      assignMedicinesToRacks);   // ← NEW: Bulk assign
 router.get('/grn/:id',                 getGRNById);

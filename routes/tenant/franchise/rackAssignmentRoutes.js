@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getRackConfig,
+  getRacksByCounter,
   updateRackConfig,
   getRackAssignments,
   autoAssignMedicine,
@@ -17,6 +18,7 @@ const router = express.Router();
 // Rack Configuration
 // ────────────────────────────────────────────────────────────────────────────
 router.get('/rack-config', getRackConfig);
+router.get('/racks/by-counter/:counterId', getRacksByCounter);
 router.put('/rack-config', updateRackConfig);
 
 // ────────────────────────────────────────────────────────────────────────────
