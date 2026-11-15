@@ -47,7 +47,7 @@ export const registerTenant = asyncHandler(async (req, res) => {
 
     const finalDbUri = dbUri
         ? dbUri
-        : `${process.env.BASE_DB_URI.replace(/\/$/, '')}/${cleanSubdomain}`;
+        : process.env.BASE_DB_URI.replace(/\/[^/]*$/, `/tenant_${cleanSubdomain}`);
 
     // Create tenant record
     const tenant = await Tenant.create({

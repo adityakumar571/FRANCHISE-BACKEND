@@ -46,6 +46,7 @@ import contactRoutes             from "./routes/contactRoutes.js";
 import siteSettingsRoutes        from "./routes/siteSettingsRoutes.js";
 import uploadRoutes              from "./routes/uploadRoutes.js";
 import supplierRoutes            from "./routes/SupplierRoutes.js";
+import superAdminDashboardRoutes from "./routes/superAdminDashboard.routes.js";
 
 /* ── Tenant Middleware ── */
 import { tenantMiddleware }  from "./middleware/tenant.middleware.js";
@@ -161,6 +162,7 @@ app.use("/api/site-settings",       siteSettingsRoutes);
 app.use("/api/subscription",        subscriptionRoutes);
 app.use("/api/free-trial-packages", freeTrialPackageRoutes);
 app.use("/api/suppliers",           supplierRoutes);
+app.use("/api/superadmin/dashboard", superAdminDashboardRoutes);
 
 /* Franchise Supplier routes - BEFORE tenant middleware (uses main DB suppliers) */
 import franchiseSupplierRoutes from "./routes/FranchiseSupplierRoutes.js";
@@ -265,8 +267,8 @@ app.use("/api/franchise/inventory",   franchiseFullInventoryRoutes);
 app.use("/api/franchise/pos",         franchisePosRoutes);
 app.use("/api/franchise/live-rates",  franchiseLiveRatesRoutes);
 app.use("/api/franchise/master",      franchiseMasterRoutes);
-app.use("/api/franchise/medicines",   globalMedicineRoutes);
 app.use("/api/franchise/racks",       franchiseRackAssignmentRoutes);  // ✅ Rack assignment routes
+// ❌ REMOVED: app.use("/api/franchise/medicines", globalMedicineRoutes); // ← Removed: medicines now handled in remainingRoutes
 // ❌ REMOVED: app.use("/api/franchise/suppliers", franchiseSupplierRoutesNew);
 
 // ✅ Supplier orders route for franchise portal (uses global suppliers + tenant POs)

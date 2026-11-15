@@ -50,10 +50,43 @@ export const getRackConfig = asyncHandler(async (req, res) => {
           isActive: true,
         },
       ],
+      // Add default racks for frontend
+      racks: {
+        'Counter-1': ['RACK-A', 'RACK-B', 'RACK-C', 'RACK-D', 'RACK-E'],
+      },
     };
+  } else {
+    // Add racks mapping for each counter
+    if (!config.racks) {
+      config.racks = {};
+      config.counters?.forEach(counter => {
+        config.racks[counter.counterId] = ['RACK-A', 'RACK-B', 'RACK-C', 'RACK-D', 'RACK-E'];
+      });
+    }
   }
 
   return res.status(200).json(new apiResponse(200, config, 'Rack configuration fetched'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/racks/by-counter/:counterId
+// Get all racks for a specific counter
+// ────────────────────────────────────────────────────────────────────────────
+export const getRacksByCounter = asyncHandler(async (req, res) => {
+  const { counterId } = req.params;
+
+  if (!counterId) {
+    return res.status(400).json(new apiResponse(400, null, 'Counter ID required'));
+  }
+
+  // Return standard racks for now (RACK-A to RACK-E)
+  // In future, this can be expanded to fetch from Rack model if needed
+  const racks = ['RACK-A', 'RACK-B', 'RACK-C', 'RACK-D', 'RACK-E'];
+
+  return res.status(200).json(new apiResponse(200, {
+    counterId,
+    racks,
+  }, 'Racks fetched'));
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -121,13 +154,16 @@ export const getRackAssignments = asyncHandler(async (req, res) => {
 
   const result = assignments.map((a) => ({
     _id: a._id,
-    medicineId: a.medicineId?._id,
+    medicineId: a.medicineId?._id || a.medicineId,  // Handle both populated and raw ID
     medicineName: a.medicineName,
     medicineBrand: a.medicineId?.name,
     category: a.medicineId?.category,
     batchNo: a.batchNo,
     counterId: a.counterId,
     rackId: a.rackId,
+    shelf: a.shelf,                   // ← ADD: Shelf number
+    row: a.row,                       // ← ADD: Row letter
+    column: a.column,                 // ← ADD: Column number
     position: a.position,
     assignedVia: a.assignedVia,
     grnId: a.grnId,

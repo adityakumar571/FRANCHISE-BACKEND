@@ -334,53 +334,17 @@ export const createMedicine = asyncHandler(async (req, res) => {
     }
   }
 
-  // Get category, formulation, company names from SupplierMaster
-  let categoryName = "",
-    formulationName = "",
-    companyName = "";
-
-  if (req.body.categoryId) {
-    try {
-      const cat = await SupplierMaster.findById(req.body.categoryId)
-        .select("name")
-        .lean();
-      if (cat) categoryName = cat.name;
-    } catch (e) {
-      console.log("Category lookup failed:", e.message);
-    }
-  }
-
-  if (req.body.formulationId) {
-    try {
-      const form = await SupplierMaster.findById(req.body.formulationId)
-        .select("name")
-        .lean();
-      if (form) formulationName = form.name;
-    } catch (e) {
-      console.log("Formulation lookup failed:", e.message);
-    }
-  }
-
-  if (req.body.companyId) {
-    try {
-      const comp = await SupplierMaster.findById(req.body.companyId)
-        .select("name")
-        .lean();
-      if (comp) companyName = comp.name;
-    } catch (e) {
-      console.log("Company lookup failed:", e.message);
-    }
-  }
-
   // Create medicine with batches
+  // NOTE: category and medicalSystem now come as hardcoded string values, not IDs
   const med = await Medicine.create({
     name: req.body.name,
     salt: req.body.salt,
+    brand: req.body.brand || "",
     genericName: req.body.genericName || "",
-    category: categoryName || req.body.categoryId || req.body.category || "", // Store name, fallback to ID
-    formulation:
-      formulationName || req.body.formulationId || req.body.formulation || "", // Store name, fallback to ID
-    company: companyName || req.body.companyId || req.body.company || "",
+    category: req.body.category || "",                    // Hardcoded string value
+    medical_system: req.body.medicalSystem || "",         // Hardcoded string value
+    formulation: req.body.formulation || "",              // Not used in form, but kept for compatibility
+    company: req.body.company || "",
     strength: req.body.strength || "",
     packSize: req.body.packSize || "",
     mrp: req.body.mrp,
@@ -453,34 +417,8 @@ export const getMedicineById = asyncHandler(async (req, res) => {
       .status(404)
       .json(new apiResponse(404, null, "Medicine not found"));
 
-  // Populate category, formulation, and counter with proper names/objects
-  const categoryLookup = {};
-  const companyLookup = {};
-  const formulationLookup = {};
-  const counterLookup = {};
-
-  try {
-    const masters = await SupplierMaster.find({ isActive: true }).lean();
-    masters.forEach((m) => {
-      if (m.type === "category") {
-        categoryLookup[m._id.toString()] = { _id: m._id.toString(), name: m.name, type: m.type };
-        categoryLookup[m.name] = { _id: m._id.toString(), name: m.name, type: m.type };
-      }
-      if (m.type === "company") {
-        companyLookup[m._id.toString()] = { _id: m._id.toString(), name: m.name, type: m.type };
-        companyLookup[m.name] = { _id: m._id.toString(), name: m.name, type: m.type };
-      }
-      if (m.type === "formulation") {
-        const formulationObj = { _id: m._id.toString(), name: m.name, type: m.type };
-        formulationLookup[m._id.toString()] = formulationObj;
-        formulationLookup[m.name] = formulationObj;
-      }
-    });
-  } catch (e) {
-    console.log("Master lookup failed:", e.message);
-  }
-
   // Lookup counter objects
+  const counterLookup = {};
   try {
     const counters = await Counter.find({ isActive: true }).lean();
     counters.forEach((c) => {
@@ -495,29 +433,9 @@ export const getMedicineById = asyncHandler(async (req, res) => {
     console.log("Counter lookup failed:", e.message);
   }
 
-  // Enrich medicine with populated objects
-  // For formulation: if it's an ID, try to find the name from SupplierMaster
-  let formulationObj = formulationLookup[String(med.formulation)] || formulationLookup[med.formulation];
-  if (!formulationObj && med.formulation) {
-    // Try to fetch from SupplierMaster by ID
-    try {
-      const formMaster = await SupplierMaster.findById(med.formulation).select("_id name type").lean();
-      if (formMaster) {
-        formulationObj = { _id: formMaster._id.toString(), name: formMaster.name, type: formMaster.type };
-      }
-    } catch (e) {
-      console.log("Formulation lookup by ID failed:", e.message);
-    }
-  }
-  if (!formulationObj) {
-    formulationObj = { _id: med.formulation, name: med.formulation, type: "formulation" };
-  }
-
+  // Return medicine with counter lookup only (category and medicalSystem are now strings)
   const enrichedMed = {
     ...med,
-    category: categoryLookup[String(med.category)] || categoryLookup[med.category] || { _id: med.category, name: med.category, type: "category" },
-    company: companyLookup[String(med.company)] || companyLookup[med.company] || { _id: med.company, name: med.company, type: "company" },
-    formulation: formulationObj,
     counterId: counterLookup[String(med.counterId)] || { _id: med.counterId, name: med.counterId, code: med.counterId },
   };
 
