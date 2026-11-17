@@ -107,10 +107,10 @@ app.use(cors({
   ],
 }));
 
-/* ── Connect DB + Firebase in parallel ── */
+/* ── Connect DB (Firebase disabled) ── */
 Promise.all([
   connectMainDB(),
-  Promise.resolve(initializeFirebase()),
+  // Promise.resolve(initializeFirebase()),  // 🔴 Firebase temporarily disabled
 ]).catch((err) => {
   console.error("❌ Startup initialization failed:", err.message);
   process.exit(1);
