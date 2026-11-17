@@ -3,6 +3,16 @@ import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { apiResponse } from '../../../utils/apiResponse.js';
 import { getMedicineModel } from '../../../models/tenant/franchise/Medicine.model.js';
 import { getMedicineBatchModel } from '../../../models/tenant/franchise/MedicineBatch.model.js';
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/franchise/pos/medicines/categories
+// Get distinct categories from tenant medicine inventory
+// ────────────────────────────────────────────────────────────────────────────
+export const getMedicineCategories = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const categories = await Medicine.distinct('category', { isActive: true, category: { $ne: null, $ne: '' } });
+  return res.status(200).json(new apiResponse(200, categories.sort(), 'Categories fetched'));
+});
 import { getCustomerModel } from '../../../models/tenant/franchise/Customer.model.js';
 import { getSaleInvoiceModel } from '../../../models/tenant/franchise/SaleInvoice.model.js';
 import { getHoldBillModel } from '../../../models/tenant/franchise/HoldBill.model.js';

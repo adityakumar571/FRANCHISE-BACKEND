@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   searchMedicines,
+  getMedicineCategories,
   getMedicineByBarcode,
   searchCustomers,
   addCustomer,
@@ -27,6 +28,7 @@ const router = express.Router();
 
 // ── Medicine search & barcode ──────────────────────────────────────
 router.get('/medicines/search',           searchMedicines);
+router.get('/medicines/categories',       getMedicineCategories);
 router.get('/medicines/barcode/:barcode', getMedicineByBarcode);
 
 // ── Customer search & add ──────────────────────────────────────────
