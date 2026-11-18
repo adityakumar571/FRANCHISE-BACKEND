@@ -1,4 +1,5 @@
 /* eslint-disable */
+import fs from "fs";
 import { asyncHandler } from "../../../utils/asyncHandler.js";
 import { apiResponse } from "../../../utils/apiResponse.js";
 import { getMedicineModel } from "../../../models/tenant/franchise/Medicine.model.js";
@@ -101,7 +102,7 @@ export const getMedicines = asyncHandler(async (req, res) => {
   // Get category and company names from SupplierMaster for mapping IDs to names
   const categoryLookup = {};
   const companyLookup = {};
-  const formulationLookup = {}; // ← Fetch full formulation objects
+  const formulationLookup = {}; 
   const counterLookup = {}; // ← Fetch full counter objects
 
   try {
@@ -192,7 +193,7 @@ export const getMedicines = asyncHandler(async (req, res) => {
             ? "Low Stock"
             : "In Stock",
     };
-    
+
     console.log("🏥 [getMedicines] Enriched medicine record:", enriched);
     return enriched;
   });
@@ -232,7 +233,9 @@ export const getMedicines = asyncHandler(async (req, res) => {
 
     // Also add formulations from actual medicine records (in case they're stored as names/IDs not in masters)
     try {
-      const allMeds = await Medicine.find({ isActive: true }).select("formulation").lean();
+      const allMeds = await Medicine.find({ isActive: true })
+        .select("formulation")
+        .lean();
       allMeds.forEach((m) => {
         if (m.formulation) {
           uniqueFormulations.add(m.formulation);
@@ -341,9 +344,9 @@ export const createMedicine = asyncHandler(async (req, res) => {
     salt: req.body.salt,
     brand: req.body.brand || "",
     genericName: req.body.genericName || "",
-    category: req.body.category || "",                    // Hardcoded string value
-    medical_system: req.body.medicalSystem || "",         // Hardcoded string value
-    formulation: req.body.formulation || "",              // Not used in form, but kept for compatibility
+    category: req.body.category || "", // Hardcoded string value
+    medical_system: req.body.medicalSystem || "", // Hardcoded string value
+    formulation: req.body.formulation || "", // Not used in form, but kept for compatibility
     company: req.body.company || "",
     strength: req.body.strength || "",
     packSize: req.body.packSize || "",
@@ -410,7 +413,7 @@ export const updateMedicine = asyncHandler(async (req, res) => {
 export const getMedicineById = asyncHandler(async (req, res) => {
   const Medicine = getMedicineModel(req.db);
   const Counter = getCounterModel(req.db);
-  
+
   const med = await Medicine.findById(req.params.id).lean();
   if (!med)
     return res
@@ -436,10 +439,16 @@ export const getMedicineById = asyncHandler(async (req, res) => {
   // Return medicine with counter lookup only (category and medicalSystem are now strings)
   const enrichedMed = {
     ...med,
-    counterId: counterLookup[String(med.counterId)] || { _id: med.counterId, name: med.counterId, code: med.counterId },
+    counterId: counterLookup[String(med.counterId)] || {
+      _id: med.counterId,
+      name: med.counterId,
+      code: med.counterId,
+    },
   };
 
-  return res.status(200).json(new apiResponse(200, enrichedMed, "Medicine fetched"));
+  return res
+    .status(200)
+    .json(new apiResponse(200, enrichedMed, "Medicine fetched"));
 });
 
 // ── PATCH /api/franchise/medicines/:id/status
@@ -1229,4 +1238,367 @@ export const getRackSummary = asyncHandler(async (req, res) => {
       "Rack summary fetched",
     ),
   );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BULK UPLOAD - Excel-based medicine import
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── POST /api/franchise/medicines/bulk-upload
+// Upload medicines in bulk from Excel
+export const bulkUploadMedicines = asyncHandler(async (req, res) => {
+  const Medicine = getMedicineModel(req.db);
+  const Rack = getRackModel(req.db);
+
+  // Import utilities
+  const { parseAndValidateExcel } =
+    await import("../../../utils/excelParser.js");
+  const {
+    findMatchingMedicine,
+    validateMedicineData,
+    prepareMedicineData,
+    prepareBatchData,
+  } = await import("../../../utils/medicineMatcher.js");
+
+  // Validate file upload
+  if (!req.file) {
+    return res
+      .status(400)
+      .json(new apiResponse(400, null, "Excel file is required"));
+  }
+
+  const { counterId, defaultRackId } = req.body;
+  // counterId is now OPTIONAL - no counter selection needed
+
+  try {
+    console.log(
+      "📤 [bulkUploadMedicines] Starting bulk upload:",
+      req.file.originalname,
+    );
+
+    // Parse and validate Excel
+    const parseResult = parseAndValidateExcel(req.file.path);
+
+    if (!parseResult.success) {
+      return res
+        .status(400)
+        .json(new apiResponse(400, null, parseResult.error));
+    }
+
+    const medicines = parseResult.medicines;
+
+    // Verify counter if provided
+    let counter = null;
+    if (counterId) {
+      const Counter = getCounterModel(req.db);
+      counter = await Counter.findById(counterId);
+      if (!counter) {
+        return res
+          .status(400)
+          .json(new apiResponse(400, null, "Counter not found"));
+      }
+    }
+
+    // Verify default rack if provided
+    let defaultRack = null;
+    if (defaultRackId) {
+      defaultRack = await Rack.findById(defaultRackId);
+      if (!defaultRack) {
+        console.warn("⚠️ Default rack not found, will skip rack assignment");
+      }
+    }
+
+    // Process each medicine
+    const results = {
+      created: [],
+      updated: [],
+      failed: [],
+      summary: {
+        total: medicines.length,
+        created: 0,
+        updated: 0,
+        failed: 0,
+      },
+    };
+
+    for (let i = 0; i < medicines.length; i++) {
+      const rowData = medicines[i];
+      const rowNumber = i + 2; // +2 because header is row 1, data starts at row 2
+
+      console.log(`📍 [Row ${rowNumber}] Parsing:`, {
+        name: rowData.name,
+        salt: rowData.salt,
+        category: rowData.category,
+        medicalSystem: rowData.medicalSystem,
+        expiryDate: rowData.expiryDate,
+        quantity: rowData.quantity,
+      });
+
+      try {
+        // Validate row data
+        const validation = validateMedicineData(rowData, rowNumber);
+        if (!validation.valid) {
+          console.log(`⚠️  [Row ${rowNumber}] Validation failed:`, validation.errors);
+          results.failed.push({
+            row: rowNumber,
+            name: rowData.name || "—",
+            reason: validation.errors.join("; "),
+          });
+          results.summary.failed++;
+          continue;
+        }
+
+        // Check for existing medicine (case-insensitive matching)
+        const existingMedicine = await findMatchingMedicine(Medicine, {
+          name: rowData.name,
+          salt: rowData.salt,
+          strength: rowData.strength,
+        });
+
+        if (existingMedicine) {
+          // UPDATE existing medicine
+          console.log(
+            `✏️  [bulkUploadMedicines] Updating medicine: ${existingMedicine._id}`,
+          );
+
+          // Prepare batch if quantity > 0
+          const batch = prepareBatchData(rowData);
+
+          if (batch) {
+            // Check if batch already exists (handle undefined batches)
+            const batchExists = existingMedicine.batches?.some(
+              (b) => b.batchNo === batch.batchNo,
+            ) || false;
+
+            if (!batchExists) {
+              // Add new batch
+              const updatedMed = await Medicine.findByIdAndUpdate(
+                existingMedicine._id,
+                {
+                  $push: { batches: batch },
+                  updatedBy: req.user?._id,
+                },
+                { new: true, runValidators: true },
+              );
+
+              results.updated.push({
+                row: rowNumber,
+                name: updatedMed.name,
+                action: "batch_added",
+                medicineId: updatedMed._id,
+                batchNo: batch.batchNo,
+                quantity: batch.quantity,
+                createdAt: updatedMed.createdAt,
+                updatedAt: updatedMed.updatedAt,
+              });
+              results.summary.updated++;
+            } else {
+              // Same batch exists - ADD quantity (update existing batch)
+              console.log(
+                `📦 [bulkUploadMedicines] Adding quantity to existing batch ${batch.batchNo} for ${existingMedicine.name}`,
+              );
+
+              const existingBatchIndex = existingMedicine.batches.findIndex(
+                (b) => b.batchNo === batch.batchNo,
+              );
+
+              const oldQty = existingMedicine.batches[existingBatchIndex]?.quantity;
+
+              // Update existing batch - ADD quantity to it
+              const updatedBatches = [...existingMedicine.batches];
+              updatedBatches[existingBatchIndex].quantity += batch.quantity;
+              updatedBatches[existingBatchIndex].availableQty += batch.quantity;
+
+              // Calculate new currentStock from all batches
+              const newCurrentStock = updatedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+
+              const updatedMed = await Medicine.findByIdAndUpdate(
+                existingMedicine._id,
+                {
+                  $set: {
+                    batches: updatedBatches,
+                    currentStock: newCurrentStock,
+                    updatedBy: req.user?._id,
+                  },
+                },
+                { new: true, runValidators: true },
+              );
+
+              results.updated.push({
+                row: rowNumber,
+                name: updatedMed.name,
+                action: "batch_qty_increased",
+                medicineId: updatedMed._id,
+                batchNo: batch.batchNo,
+                addedQty: batch.quantity,
+                previousQty: oldQty,
+                newTotalQty: updatedBatches[existingBatchIndex].quantity,
+                newCurrentStock: newCurrentStock,
+                createdAt: updatedMed.createdAt,
+                updatedAt: updatedMed.updatedAt,
+              });
+              results.summary.updated++;
+            }
+          } else {
+            // No batch to add (quantity = 0)
+            results.failed.push({
+              row: rowNumber,
+              name: rowData.name,
+              reason: "Quantity is 0 and no batch data",
+            });
+            results.summary.failed++;
+          }
+        } else {
+          // CREATE new medicine
+          console.log(
+            `✨ [bulkUploadMedicines] Creating new medicine: ${rowData.name}`,
+          );
+
+          // Prepare medicine data
+          const rackLocation = defaultRack
+            ? {
+                rackId: defaultRack.code,
+                shelf: 1,
+                row: "A",
+                column: 1,
+                position: `${defaultRack.code}-1-A-1`,
+              }
+            : undefined;
+
+          const medicineData = prepareMedicineData(rowData, counterId, null);
+          medicineData.rackLocation = rackLocation;
+
+          // Prepare batch if quantity > 0
+          const batch = prepareBatchData(rowData);
+          if (batch) {
+            medicineData.batches = [batch];
+          }
+
+          // Create medicine
+          const newMedicine = await Medicine.create(medicineData);
+
+          results.created.push({
+            row: rowNumber,
+            name: newMedicine.name,
+            action: "created",
+            medicineId: newMedicine._id,
+            batchCount: medicineData.batches?.length || 0,
+            createdAt: newMedicine.createdAt,
+            updatedAt: newMedicine.updatedAt,
+          });
+          results.summary.created++;
+        }
+      } catch (rowError) {
+        console.error(
+          `❌ [bulkUploadMedicines] Row ${rowNumber} error:`,
+          rowError,
+        );
+        results.failed.push({
+          row: rowNumber,
+          name: rowData.name || "—",
+          reason: rowError.message || "Unknown error",
+        });
+        results.summary.failed++;
+      }
+    }
+
+    console.log(
+      "✅ [bulkUploadMedicines] Bulk upload completed:",
+      results.summary,
+    );
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (e) {
+      console.warn("⚠️ Failed to delete temp file:", e.message);
+    }
+
+    return res.status(200).json(
+      new apiResponse(
+        200,
+        {
+          summary: results.summary,
+          created: results.created,
+          updated: results.updated,
+          failed: results.failed,
+        },
+        "Bulk upload completed successfully",
+      ),
+    );
+  } catch (error) {
+    console.error("❌ [bulkUploadMedicines] Fatal error:", error);
+
+    // Clean up temp file
+    try {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+    } catch (e) {
+      // ignore
+    }
+
+    return res
+      .status(500)
+      .json(new apiResponse(500, null, "Bulk upload failed: " + error.message));
+  }
+});
+
+// ── POST /api/franchise/medicines/bulk-upload/preview
+// Parse Excel and return preview without saving to DB
+export const previewBulkUpload = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res
+      .status(400)
+      .json(new apiResponse(400, null, "Excel file is required"));
+  }
+
+  try {
+    const { parseAndValidateExcel } =
+      await import("../../../utils/excelParser.js");
+
+    // Parse Excel
+    const parseResult = parseAndValidateExcel(req.file.path);
+
+    if (!parseResult.success) {
+      return res
+        .status(400)
+        .json(new apiResponse(400, null, parseResult.error));
+    }
+
+    const medicines = parseResult.medicines.slice(0, 10); // Show first 10 rows
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (e) {
+      console.warn("⚠️ Failed to delete temp file:", e.message);
+    }
+
+    return res.status(200).json(
+      new apiResponse(
+        200,
+        {
+          total: parseResult.count,
+          preview: medicines,
+          columns: Object.keys(parseResult.columns).map((field) => ({
+            field,
+            excelColumn: parseResult.columns[field],
+          })),
+        },
+        "Excel preview generated",
+      ),
+    );
+  } catch (error) {
+    console.error("❌ [previewBulkUpload] Error:", error);
+
+    // Clean up temp file
+    try {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+    } catch (e) {
+      // ignore
+    }
+
+    return res
+      .status(500)
+      .json(new apiResponse(500, null, "Preview failed: " + error.message));
+  }
 });

@@ -207,6 +207,8 @@ const MedicineSchema = new mongoose.Schema(
 MedicineSchema.index({ name: "text", genericName: "text", salt: "text" });
 MedicineSchema.index({ category: 1, isActive: 1 });
 MedicineSchema.index({ "batches.expiryDate": 1 }); // For expiry alerts
+// Optimization for bulk upload matching
+MedicineSchema.index({ name: 1, salt: 1, strength: 1, isActive: 1 });
 
 // Pre-save hook to calculate stock from batches
 MedicineSchema.pre("save", function (next) {
