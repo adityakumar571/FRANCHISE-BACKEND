@@ -256,31 +256,55 @@ export const createPurchaseOrder = asyncHandler(async (req, res) => {
   const count = await PurchaseOrder.countDocuments();
   const poNo = `PO-${String(count + 2402).padStart(4, '0')}`;
 
-  // Calculate total amount from items
-  const totalAmount = items.reduce((sum, item) => {
-    const itemTotal = (item.quantity || 0) * (item.purchasePrice || 0);
-    return sum + itemTotal;
-  }, 0);
+  // Calculate totals from items
+  let totalAmount = 0;
+  let totalMRP = 0;
+  let totalOrderedQty = 0;
+
+  const formattedItems = items.map(item => {
+    const qty = item.quantity || 0;
+    const ptr = item.purchasePrice || 0;
+    const mrp = item.mrp || 0;
+    const itemAmount = qty * ptr;
+
+    totalAmount += itemAmount;
+    totalMRP += qty * mrp;
+    totalOrderedQty += qty;
+
+    return {
+      medicineId: item.medicineId,
+      medicineName: item.medicineName,
+      genericName: item.genericName || item.salt || '',
+      category: item.category || '',
+      salt: item.salt || '',
+      strength: item.strength || '',
+      orderedQty: qty,
+      receivedQty: 0,
+      rejectedQty: 0,
+      pendingQty: qty,
+      ptr,
+      mrp,
+      scheme: item.scheme || '',
+      amount: itemAmount
+    };
+  });
+
+  // Calculate GST (assume 12% default if not provided)
+  const gstRate = 0.12;
+  const gstAmt = totalAmount * gstRate;
+  const grandTotal = totalAmount + gstAmt;
 
   // Create the purchase order
   const po = await PurchaseOrder.create({
     poNo,
     supplierId,
     supplier: supplierName,
-    items: items.map(item => ({
-      medicineId: item.medicineId,
-      medicineName: item.medicineName,
-      salt: item.salt,
-      formulation: item.formulation,
-      qty: item.quantity,
-      ptr: item.purchasePrice,
-      mrp: item.mrp,
-      scheme: item.scheme,
-      batchNo: item.batchNo,
-      expiryDate: item.expiryDate,
-      amount: (item.quantity || 0) * (item.purchasePrice || 0)
-    })),
+    items: formattedItems,
     totalAmount,
+    totalMRP,
+    totalOrderedQty,
+    gstAmt,
+    grandTotal,
     expectedDate: expectedDeliveryDate ? new Date(expectedDeliveryDate) : undefined,
     notes,
     status: 'pending'
@@ -304,6 +328,23 @@ export const getPurchaseOrderById = asyncHandler(async (req, res) => {
   const po = await PurchaseOrder.findById(req.params.id).lean();
   if (!po) return res.status(404).json(new apiResponse(404, null, 'Purchase order not found'));
 
+  // Calculate metrics from items
+  let totalReceivedQty = 0;
+  let totalRejectedQty = 0;
+  let totalOrderedQty = 0;
+
+  if (po.items && po.items.length > 0) {
+    po.items.forEach(item => {
+      totalOrderedQty += item.orderedQty || 0;
+      totalReceivedQty += item.receivedQty || 0;
+      totalRejectedQty += item.rejectedQty || 0;
+      // Update pendingQty
+      item.pendingQty = (item.orderedQty || 0) - (item.receivedQty || 0) - (item.rejectedQty || 0);
+    });
+  }
+
+  const completionPct = totalOrderedQty > 0 ? Math.round((totalReceivedQty / totalOrderedQty) * 100) : 0;
+
   // Safe date formatting
   const formatDate = (date) => {
     if (!date) return null;
@@ -316,12 +357,18 @@ export const getPurchaseOrderById = asyncHandler(async (req, res) => {
     }
   };
 
-  // Format response with safe dates
+  // Format response with calculated metrics
   const formattedPO = {
     ...po,
+    totalOrderedQty,
+    totalReceivedQty,
+    totalRejectedQty,
+    completionPct,
     createdAt: formatDate(po.createdAt),
     expectedDate: formatDate(po.expectedDate),
     updatedAt: formatDate(po.updatedAt),
+    orderDate: formatDate(po.orderDate),
+    lastGRNDate: po.lastGRNDate ? formatDate(po.lastGRNDate) : null,
   };
 
   return res.status(200).json(new apiResponse(200, formattedPO, 'Purchase order fetched'));
@@ -881,27 +928,66 @@ export const createGRN = asyncHandler(async (req, res) => {
       ? new Date(item.expiryDate)
       : new Date(Date.now() + 365 * 86400000);
 
-    // ✅ IMPROVED: Find medicine by ID first, then by name
+    // ✅ IMPROVED: Find medicine by ID first, then by normalized name + salt
     let med = null;
+
+    // Helper: Normalize medicine name for matching
+    const normalizeMedicineName = (name) => {
+      return String(name)
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ')           // Normalize spaces
+        .replace(/\s*\d+\s*mg\s*$/i, '') // Remove trailing "500mg", "900mg", etc
+        .replace(/\s*\(\s*\d+\s*mg\s*\)\s*$/i, '') // Remove trailing "(500mg)"
+        .replace(/[^\w\s]/g, '')        // Remove special chars
+        .trim();
+    };
+
+    const normName = normalizeMedicineName(item.medicineName);
+    const normSalt = String(item.salt || '').toLowerCase().trim();
+
+    console.log(`🔍 Matching: "${item.medicineName}" → normalized: "${normName}", salt: "${normSalt}"`);
 
     // Try 1: Search by medicineId
     if (item.medicineId) {
       med = await Medicine.findById(item.medicineId);
+      if (med) console.log(`✅ Found by ID: ${med.name}`);
     }
 
-    // Try 2: Search by name (both active and inactive)
+    // Try 2: Search by normalized name + salt + strength + brand (exact match)
     if (!med) {
-      med = await Medicine.findOne(
-        { name: new RegExp(`^${item.medicineName}$`, 'i') }
-      );
+      const allMeds = await Medicine.find({ isActive: true });
+      med = allMeds.find(m => {
+        const mNormName = normalizeMedicineName(m.name);
+        const mNormSalt = String(m.salt || '').toLowerCase().trim();
+        const mStrength = String(m.strength || '').toLowerCase().trim();
+        const itemStrength = String(item.strength || '').toLowerCase().trim();
+        const mBrand = String(m.brand || '').toLowerCase().trim();
+        const itemBrand = String(item.brand || '').toLowerCase().trim();
+        return mNormName === normName && mNormSalt === normSalt && mStrength === itemStrength && mBrand === itemBrand;
+      });
+      if (med) console.log(`✅ Found by name+salt+strength+brand: ${med.name}`);
     }
 
-    // Try 3: Create new medicine if not found
+    // Try 3: Search by normalized name only (fallback)
     if (!med) {
-      console.log(`📝 Creating new medicine: ${item.medicineName}`);
+      const allMeds = await Medicine.find({ isActive: true });
+      med = allMeds.find(m => {
+        const mNormName = normalizeMedicineName(m.name);
+        return mNormName === normName;
+      });
+      if (med) console.log(`⚠️ Found by name only: ${med.name}`);
+    }
+
+    // Try 4: Create new medicine if not found
+    if (!med) {
+      console.log(`📝 Creating new medicine: ${item.medicineName} (salt: ${item.salt})`);
       med = await Medicine.create({
         name: item.medicineName,
         salt: item.salt || '',
+        brand: item.brand || '', // ← ADD brand
+        genericName: item.genericName || item.salt || '',
+        strength: item.strength || '', // ← ADD strength
         category: item.category || 'Generic',
         mrp: Number(item.mrp) || 0,
         purchasePrice: Number(item.ptr) || 0,
@@ -1398,7 +1484,9 @@ export const getSupplierMedicines = asyncHandler(async (req, res) => {
     .map(m => ({
       _id: m._id,
       name: m.name,
+      salt: m.salt || m.genericName || '', // Use salt if available, fallback to genericName
       genericName: m.genericName || '',
+      brand: m.brand || '',
       manufacturer: m.manufacturer || '',
       category: m.category,
       strength: m.strength || '',

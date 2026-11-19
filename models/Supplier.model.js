@@ -140,7 +140,15 @@ const supplierSchema = new mongoose.Schema(
           required: true,
           trim: true,
         },
+        salt: {
+          type: String,
+          trim: true,
+        },
         genericName: {
+          type: String,
+          trim: true,
+        },
+        brand: {
           type: String,
           trim: true,
         },

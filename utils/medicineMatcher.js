@@ -21,19 +21,20 @@ export const normalizeForComparison = (text) => {
 };
 
 /**
- * Find existing medicine by name + salt + strength (case-insensitive)
+ * Find existing medicine by name + salt + strength + brand (case-insensitive)
  * Returns the medicine if found, null otherwise
  */
 export const findMatchingMedicine = async (Medicine, inputData) => {
-  const { name, salt, strength } = inputData;
+  const { name, salt, strength, brand } = inputData;
 
   // Normalize inputs
   const normName = normalizeForComparison(name);
   const normSalt = normalizeForComparison(salt);
   const normStrength = normalizeForComparison(strength);
+  const normBrand = normalizeForComparison(brand);
 
-  // Validate required fields
-  if (!normName || !normSalt || !normStrength) {
+  // Validate required fields (strength & brand can be empty, but name & salt required)
+  if (!normName || !normSalt) {
     return null;
   }
 
@@ -43,7 +44,7 @@ export const findMatchingMedicine = async (Medicine, inputData) => {
     const allMedicines = await Medicine.find({
       isActive: true,
     })
-      .select("_id name salt strength batches")
+      .select("_id name salt strength brand batches")
       .lean();
 
     // Find first medicine matching normalized values
@@ -51,11 +52,13 @@ export const findMatchingMedicine = async (Medicine, inputData) => {
       const medNormName = normalizeForComparison(med.name);
       const medNormSalt = normalizeForComparison(med.salt);
       const medNormStrength = normalizeForComparison(med.strength);
+      const medNormBrand = normalizeForComparison(med.brand);
 
       return (
         medNormName === normName &&
         medNormSalt === normSalt &&
-        medNormStrength === normStrength
+        medNormStrength === normStrength &&
+        medNormBrand === normBrand
       );
     });
 
@@ -78,7 +81,7 @@ export const validateMedicineData = (rowData, rowNumber) => {
     errors.push("Medicine name is required");
   }
   if (!rowData.salt || String(rowData.salt).trim() === "") {
-    errors.push("Generic name/salt is required");
+    errors.push("Salt (generic name) is required");
   }
   if (!rowData.category || String(rowData.category).trim() === "") {
     errors.push("Category is required");
@@ -162,10 +165,10 @@ export const prepareMedicineData = (rowData, counterId, defaultRackId) => {
   return {
     name: String(rowData.name).trim(),
     salt: String(rowData.salt).trim(),
-    brand: String(rowData.brand || "").trim(),
+    brand: String(rowData.brand || "").trim(), // ← ADD brand
     genericName: String(rowData.genericName || rowData.salt).trim(),
     category: String(rowData.category).trim(),
-    medical_system: String(rowData.medicalSystem || "").trim(),
+    medical_system: String(rowData.medicalSystem || "").trim(),  // Keep for API compatibility
     strength: String(rowData.strength || "").trim(),
     formulation: String(rowData.formulation || "").trim(),
     company: String(rowData.company || "").trim(),

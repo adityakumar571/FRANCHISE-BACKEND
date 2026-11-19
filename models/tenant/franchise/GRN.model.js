@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 const GRNItemSchema = new mongoose.Schema({
   medicineId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine' },
   medicineName:    { type: String, trim: true },
+  salt:            { type: String, trim: true }, // ← ADD for matching
+  genericName:     { type: String, trim: true }, // ← ADD for reference
+  strength:        { type: String, trim: true }, // ← ADD for strength-aware matching
+  brand:           { type: String, trim: true }, // ← ADD for brand-aware matching
+  category:        { type: String, trim: true }, // ← ADD for category reference
   
   // From PO (read-only display)
   poOrderedQty:    { type: Number },                 // What was ordered in PO
