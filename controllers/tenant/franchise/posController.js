@@ -45,10 +45,16 @@ export const searchMedicines = asyncHandler(async (req, res) => {
     Medicine.countDocuments(filter),
   ]);
 
-  // Attach first active batch info for each medicine
+  // Attach all active batches for each medicine
   const result = await Promise.all(medicines.map(async (m) => {
-    const batch = await MedicineBatch.findOne({ medicineId: m._id, qty: { $gt: 0 }, isActive: true })
+    // Get first batch for display (only with stock > 0)
+    const firstBatch = await MedicineBatch.findOne({ medicineId: m._id, qty: { $gt: 0 }, isActive: true })
       .sort({ expiryDate: 1 }).lean();
+    
+    // Get ALL batches for batch selection (only with stock > 0)
+    const allBatches = await MedicineBatch.find({ medicineId: m._id, qty: { $gt: 0 }, isActive: true })
+      .sort({ expiryDate: 1 }).lean();
+    
     return {
       id:      m._id,
       name:    m.name,
@@ -57,13 +63,28 @@ export const searchMedicines = asyncHandler(async (req, res) => {
       formulation: m.formulation,
       category: m.category,
       packSize: m.packSize,
-      mrp:     batch?.mrp   ?? m.mrp,
+      mrp:     firstBatch?.mrp   ?? m.mrp,
       stock:   m.currentStock,
-      batch:   batch?.batchNo ?? '—',
-      exp:     batch?.expiryDate ? new Date(batch.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
+      batch:   firstBatch?.batchNo ?? '—',
+      exp:     firstBatch?.expiryDate ? new Date(firstBatch.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
       gst:     m.gstPercent,
       barcode: m.barcode,
       rackLabel: m.rackLabel,
+      // ← ALL BATCHES: only with qty > 0
+      batches: allBatches.map(b => ({
+        _id: b._id,
+        batchId: b._id,
+        batchNo: b.batchNo,
+        qty: b.qty,
+        availableQty: b.availableQty,
+        mrp: b.mrp,
+        ptr: b.mrp,
+        expiry: b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
+        expiryDate: b.expiryDate,
+        purchasePrice: b.purchasePrice,
+        supplierId: b.supplierId,
+        supplierName: b.supplierName,
+      })),
     };
   }));
 
@@ -90,6 +111,10 @@ export const getMedicineByBarcode = asyncHandler(async (req, res) => {
     if (!batch || !batch.medicineId) {
       return res.status(404).json(new apiResponse(404, null, 'Medicine not found for this barcode'));
     }
+    // Get all batches for this medicine (only with stock > 0)
+    const allBatches = await MedicineBatch.find({ medicineId: batch.medicineId._id, qty: { $gt: 0 }, isActive: true })
+      .sort({ expiryDate: 1 }).lean();
+    
     return res.status(200).json(new apiResponse(200, {
       id:      batch.medicineId._id,
       name:    batch.medicineId.name,
@@ -99,26 +124,52 @@ export const getMedicineByBarcode = asyncHandler(async (req, res) => {
       batch:   batch.batchNo,
       exp:     new Date(batch.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }),
       gst:     batch.medicineId.gstPercent,
+      batches: allBatches.map(b => ({
+        _id: b._id,
+        batchId: b._id,
+        batchNo: b.batchNo,
+        qty: b.qty,
+        availableQty: b.availableQty,
+        mrp: b.mrp,
+        ptr: b.mrp,
+        expiry: b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
+        expiryDate: b.expiryDate,
+      })),
     }, 'Medicine found'));
   }
 
-  const batch = await MedicineBatch.findOne({ medicineId: medicine._id, qty: { $gt: 0 }, isActive: true })
+  // Get first batch for display
+  const firstBatch = await MedicineBatch.findOne({ medicineId: medicine._id, qty: { $gt: 0 }, isActive: true })
+    .sort({ expiryDate: 1 }).lean();
+  
+  // Get ALL batches for batch selection (only with stock > 0)
+  const allBatches = await MedicineBatch.find({ medicineId: medicine._id, qty: { $gt: 0 }, isActive: true })
     .sort({ expiryDate: 1 }).lean();
 
   return res.status(200).json(new apiResponse(200, {
     id:      medicine._id,
     name:    medicine.name,
     salt:    medicine.salt,
-    company: medicine.company,
-    packSize: medicine.packSize,
-    mrp:     batch?.mrp ?? medicine.mrp,
+    mrp:     firstBatch?.mrp ?? medicine.mrp,
     stock:   medicine.currentStock,
-    batch:   batch?.batchNo ?? '—',
-    exp:     batch?.expiryDate ? new Date(batch.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
+    batch:   firstBatch?.batchNo ?? '—',
+    exp:     firstBatch?.expiryDate ? new Date(firstBatch.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
     gst:     medicine.gstPercent,
-    rackLabel: medicine.rackLabel,
+    batches: allBatches.map(b => ({
+      _id: b._id,
+      batchId: b._id,
+      batchNo: b.batchNo,
+      qty: b.qty,
+      availableQty: b.availableQty,
+      mrp: b.mrp,
+      ptr: b.mrp,
+      expiry: b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '—',
+      expiryDate: b.expiryDate,
+    })),
   }, 'Medicine found'));
 });
+
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/franchise/pos/customers/search?q=&page=

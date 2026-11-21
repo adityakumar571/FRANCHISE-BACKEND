@@ -3,6 +3,10 @@ import mongoose from 'mongoose';
 const POItemSchema = new mongoose.Schema({
   medicineId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine' },
   medicineName: { type: String, trim: true },
+  genericName:  { type: String, trim: true },        // ✅ Added
+  category:     { type: String, trim: true },        // ✅ Added
+  salt:         { type: String, trim: true },        // ✅ Added
+  strength:     { type: String, trim: true },        // ✅ Added
   orderedQty:   { type: Number, default: 1 },        // ← Quantity ordered
   receivedQty:  { type: Number, default: 0 },        // ← Quantity received (from GRNs)
   rejectedQty:  { type: Number, default: 0 },        // ← Quantity rejected (from GRNs)

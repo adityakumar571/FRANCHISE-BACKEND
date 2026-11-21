@@ -292,7 +292,7 @@ class SupplierMedicineController {
 
       const medicineName = medicine.name
 
-      medicine.remove()
+      medicine.deleteOne()
       await supplier.save()
 
       // ✨ REMOVE FROM ALL FRANCHISES

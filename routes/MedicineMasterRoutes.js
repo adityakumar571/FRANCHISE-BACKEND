@@ -32,9 +32,6 @@ router.get("/public/categories", asyncHandler(async (req, res) => {
   return res.status(200).json(new apiResponse(200, sorted, 'Categories fetched'));
 }));
 
-// ── Protected Routes (Superadmin only) ──
-router.use(verifyJWTForSuperAdmin, isSuperAdmin);
-
 // ── GET all medicines with search & filters
 router.get("/", getGlobalMedicines);
 
