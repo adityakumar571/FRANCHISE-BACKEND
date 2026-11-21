@@ -272,26 +272,50 @@ export const getReceipts = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20, search = '', mode = '' } = req.query;
   const range = dateRange(from, to);
   const SaleInvoice = getSaleInvoiceModel(req.db);
+  const Receipt     = getReceiptModel(req.db);
 
-  const filter = { invoiceDate: range, status: { $ne: 'Cancelled' } };
-  if (search) filter.$or = [{ invoiceNo: new RegExp(search, 'i') }, { customerName: new RegExp(search, 'i') }];
-  if (mode)   filter.paymentMode = mode;
+  // Build filters for both sources
+  const saleFilter = { invoiceDate: range, status: { $ne: 'Cancelled' } };
+  if (mode) saleFilter.paymentMode = mode;
+  if (search) saleFilter.$or = [{ invoiceNo: new RegExp(search, 'i') }, { customerName: new RegExp(search, 'i') }];
 
-  const skip = (Number(page) - 1) * Number(limit);
-  const [invoices, total] = await Promise.all([
-    SaleInvoice.find(filter).sort({ invoiceDate: -1 }).skip(skip).limit(Number(limit)).lean(),
-    SaleInvoice.countDocuments(filter),
+  const receiptFilter = { receiptDate: range, status: { $ne: 'Cancelled' } };
+  if (mode) receiptFilter.mode = mode;
+  if (search) receiptFilter.$or = [{ receiptNo: new RegExp(search, 'i') }, { particulars: new RegExp(search, 'i') }];
+
+  const [invoices, manualReceipts] = await Promise.all([
+    SaleInvoice.find(saleFilter).sort({ invoiceDate: -1 }).lean(),
+    Receipt.find(receiptFilter).sort({ receiptDate: -1 }).lean(),
   ]);
 
-  return res.status(200).json(new apiResponse(200, {
-    receipts: invoices.map(i => ({
+  // Merge both sources
+  const all = [
+    ...invoices.map(i => ({
       _id:         i._id,
       date:        new Date(i.invoiceDate).toLocaleDateString('en-IN'),
       voucher:     i.invoiceNo,
       particulars: `Sales - ${i.customerName}`,
       mode:        i.paymentMode,
       amount:      i.totalAmt,
+      source:      'sale',
     })),
+    ...manualReceipts.map(r => ({
+      _id:         r._id,
+      date:        new Date(r.receiptDate).toLocaleDateString('en-IN'),
+      voucher:     r.receiptNo,
+      particulars: r.particulars,
+      mode:        r.mode,
+      amount:      r.amount,
+      source:      'receipt',
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const total = all.length;
+  const skip  = (Number(page) - 1) * Number(limit);
+  const paged = all.slice(skip, skip + Number(limit));
+
+  return res.status(200).json(new apiResponse(200, {
+    receipts: paged,
     total,
     totalPages:  Math.ceil(total / Number(limit)),
     currentPage: Number(page),
@@ -300,28 +324,29 @@ export const getReceipts = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/receipts
 export const createReceipt = asyncHandler(async (req, res) => {
-  const { receiptNo, receiptDate, particulars, amount, mode, partyName, customerId, reference, chequeNo, chequeDate, bankName, notes } = req.body;
-  
-  if (!receiptNo || !particulars || !amount || !mode) {
-    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  const { receiptNo, receiptDate, date, voucher, particulars, amount, mode, partyName, customerId, reference, notes } = req.body;
+
+  if (!particulars || !amount || !mode) {
+    return res.status(400).json(new apiResponse(400, null, 'Particulars, amount and mode are required'));
   }
 
   const Receipt = getReceiptModel(req.db);
-  
+  const count = await Receipt.countDocuments();
+  const autoReceiptNo = receiptNo || voucher || `RCP-${String(count + 1001).padStart(5, '0')}`;
+  const franchiseId = req.tenant?._id;
+
   const receipt = new Receipt({
-    receiptNo,
-    receiptDate: receiptDate || new Date(),
+    receiptNo: autoReceiptNo,
+    receiptDate: receiptDate || date || new Date(),
     particulars,
-    amount,
+    amount: Number(amount),
     mode,
     partyName: partyName || 'N/A',
     customerId,
     reference,
-    chequeNo: mode === 'Cheque' ? chequeNo : undefined,
-    chequeDate: mode === 'Cheque' ? chequeDate : undefined,
-    bankName: mode === 'Cheque' ? bankName : undefined,
     notes,
     status: 'Received',
+    ...(franchiseId && { franchiseId }),
   });
 
   await receipt.save();
@@ -395,33 +420,32 @@ export const getPayments = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/payments
 export const createPayment = asyncHandler(async (req, res) => {
-  const { paymentNo, paymentDate, particulars, amount, mode, partyName, supplierId, purchaseInvoiceId, reference, chequeNo, chequeDate, bankName, notes } = req.body;
-  
-  if (!paymentNo || !particulars || !amount || !mode) {
-    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  const { paymentNo, paymentDate, date, particulars, amount, mode, partyName, reference, notes } = req.body;
+
+  if (!particulars || !amount || !mode) {
+    return res.status(400).json(new apiResponse(400, null, 'Particulars, amount and mode are required'));
   }
 
   const Payment = getPaymentModel(req.db);
-  
+  const count = await Payment.countDocuments();
+  const autoPaymentNo = paymentNo || `PMT-${String(count + 1001).padStart(5, '0')}`;
+  const franchiseId = req.tenant?._id;
+
   const payment = new Payment({
-    paymentNo,
-    paymentDate: paymentDate || new Date(),
+    paymentNo: autoPaymentNo,
+    paymentDate: paymentDate || date || new Date(),
     particulars,
-    amount,
+    amount: Number(amount),
     mode,
     partyName: partyName || 'N/A',
-    supplierId,
-    purchaseInvoiceId,
     reference,
-    chequeNo: mode === 'Cheque' ? chequeNo : undefined,
-    chequeDate: mode === 'Cheque' ? chequeDate : undefined,
-    bankName: mode === 'Cheque' ? bankName : undefined,
     notes,
     status: 'Paid',
+    ...(franchiseId && { franchiseId }),
   });
 
   await payment.save();
-  return res.status(201).json(new apiResponse(201, payment, 'Payment created successfully'));
+  return res.status(201).json(new apiResponse(201, payment, 'Payment added successfully'));
 });
 
 // ── GET /api/franchise/accounts/expenses?from=&to=&category=&page=&limit=&search=
@@ -463,27 +487,30 @@ export const getExpenses = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/expenses
 export const createExpense = asyncHandler(async (req, res) => {
-  const { expenseNo, expenseDate, particulars, amount, category, paymentMode, vendor, vendorId, reference, billNo, notes } = req.body;
-  
-  if (!expenseNo || !particulars || !amount || !category) {
-    return res.status(400).json(new apiResponse(400, null, 'Missing required fields'));
+  const { expenseDate, date, particulars, amount, category, paymentMode, vendor, reference, billNo, notes } = req.body;
+
+  if (!particulars || !amount || !category) {
+    return res.status(400).json(new apiResponse(400, null, 'Particulars, amount and category are required'));
   }
 
   const Expense = getExpenseModel(req.db);
-  
+  const count = await Expense.countDocuments();
+  const expenseNo = `EXP-${String(count + 1001).padStart(5, '0')}`;
+  const franchiseId = req.tenant?._id;
+
   const expense = new Expense({
     expenseNo,
-    expenseDate: expenseDate || new Date(),
+    expenseDate: expenseDate || date || new Date(),
     particulars,
-    amount,
+    amount: Number(amount),
     category,
     paymentMode: paymentMode || 'Cash',
     vendor: vendor || 'N/A',
-    vendorId,
     reference,
     billNo,
     notes,
     status: 'Recorded',
+    ...(franchiseId && { franchiseId }),
   });
 
   await expense.save();
@@ -561,46 +588,47 @@ export const getJournal = asyncHandler(async (req, res) => {
 
 // ── POST /api/franchise/accounts/journal
 export const createJournalEntry = asyncHandler(async (req, res) => {
-  const { jvNo, entryDate, narration, lines } = req.body;
+  const { jvNo, entryDate, date, narration, lines } = req.body;
 
-  if (!jvNo || !narration || !lines || lines.length < 2) {
-    return res.status(400).json(new apiResponse(400, null, 'Invalid journal entry. Minimum 2 lines required'));
+  if (!narration || !lines || lines.length < 2) {
+    return res.status(400).json(new apiResponse(400, null, 'Narration and minimum 2 lines are required'));
   }
 
-  // Verify debit = credit
-  const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
-  const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+  // Support both 'account' and 'accountName' as line key
+  const normalizedLines = lines.map(l => ({
+    accountName: l.accountName || l.account || 'General',
+    debit:       Number(l.debit || 0),
+    credit:      Number(l.credit || 0),
+    narration:   l.narration || '',
+  }));
+
+  const totalDebit  = normalizedLines.reduce((s, l) => s + l.debit, 0);
+  const totalCredit = normalizedLines.reduce((s, l) => s + l.credit, 0);
 
   if (Math.abs(totalDebit - totalCredit) > 0.01) {
-    return res.status(400).json(new apiResponse(400, null, `Debit (${totalDebit}) must equal Credit (${totalCredit})`));
+    return res.status(400).json(new apiResponse(400, null, `Debit (${totalDebit.toFixed(2)}) must equal Credit (${totalCredit.toFixed(2)})`));
   }
 
   const JournalEntry = getJournalEntryModel(req.db);
-  const AccountMaster = getAccountMasterModel(req.db);
-
-  // Verify all accounts exist
-  const accountNames = lines.map(l => l.accountName);
-  const accounts = await AccountMaster.find({ accountName: { $in: accountNames } }).lean();
-
-  if (accounts.length !== lines.length) {
-    return res.status(400).json(new apiResponse(400, null, 'One or more accounts not found in Account Master'));
-  }
+  const count = await JournalEntry.countDocuments();
+  const autoJvNo = jvNo || `JV-${String(count + 1001).padStart(5, '0')}`;
+  const franchiseId = req.tenant?._id;
 
   const entry = new JournalEntry({
-    jvNo,
-    entryDate: entryDate || new Date(),
+    jvNo: autoJvNo,
+    entryDate: entryDate || date || new Date(),
     narration,
-    lines: lines.map((l, i) => ({
-      accountId: accounts[i]._id,
-      accountName: l.accountName,
-      accountType: accounts[i].accountType,
-      debit: l.debit || 0,
-      credit: l.credit || 0,
-      narration: l.narration,
+    lines: normalizedLines.map(l => ({
+      accountName:  l.accountName,
+      accountType:  'Other',      // default; no strict AccountMaster check
+      debit:        l.debit,
+      credit:       l.credit,
+      narration:    l.narration,
     })),
     totalDebit,
     totalCredit,
     status: 'Posted',
+    ...(franchiseId && { franchiseId }),
   });
 
   await entry.save();

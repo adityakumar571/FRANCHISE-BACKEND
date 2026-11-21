@@ -13,7 +13,7 @@ const ExpenseSchema = new mongoose.Schema({
   billNo:       { type: String },
   notes:        { type: String },
   status:       { type: String, enum: ['Recorded', 'Approved', 'Paid', 'Cancelled'], default: 'Recorded' },
-  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise', required: true },
+  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise' },
 }, { timestamps: true });
 
 export const getExpenseModel = (connection) => {

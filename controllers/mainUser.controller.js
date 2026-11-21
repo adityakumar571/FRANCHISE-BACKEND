@@ -85,7 +85,16 @@ export const loginUser = asyncHandler(async (req, res) => {
     // ===============================
     // 🔍 FIND USER — by email or userId
     // ===============================
-    const query = email ? { email: email.toLowerCase().trim() } : { userId }
+    // If userId looks like an email (contains @), search by email field too
+    let query;
+    if (email) {
+        query = { email: email.toLowerCase().trim() };
+    } else if (userId && userId.includes('@')) {
+        // userId field contains an email — search both fields
+        query = { $or: [{ email: userId.toLowerCase().trim() }, { userId }] };
+    } else {
+        query = { userId };
+    }
     console.log("🔍 LOGIN ATTEMPT —", JSON.stringify(query));
     const user = await User.findOne(query).populate("tenantId", "schoolName logo subdomain");
     console.log("🔍 USER FOUND:", user ? "YES" : "NO");

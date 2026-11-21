@@ -15,7 +15,7 @@ const PaymentSchema = new mongoose.Schema({
   bankName:     { type: String },
   notes:        { type: String },
   status:       { type: String, enum: ['Paid', 'Pending', 'Cancelled'], default: 'Paid' },
-  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise', required: true },
+  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise' },
 }, { timestamps: true });
 
 export const getPaymentModel = (connection) => {

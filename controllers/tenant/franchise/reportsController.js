@@ -8,8 +8,9 @@ import { getMedicineBatchModel } from '../../../models/tenant/franchise/Medicine
 import { getCustomerModel } from '../../../models/tenant/franchise/Customer.model.js';
 
 const dateRange = (from, to) => {
-  const s = from ? new Date(from) : new Date(new Date().setDate(1));
+  // If no dates given, return last 90 days by default
   const e = to   ? new Date(to)   : new Date();
+  const s = from ? new Date(from) : new Date(e.getTime() - 90 * 24 * 60 * 60 * 1000);
   s.setHours(0,0,0,0); e.setHours(23,59,59,999);
   return { $gte: s, $lte: e };
 };
@@ -73,22 +74,71 @@ export const getSalesReport = asyncHandler(async (req, res) => {
 export const getPurchaseReport = asyncHandler(async (req, res) => {
   const { from, to, page = 1, limit = 20 } = req.query;
   const range = dateRange(from, to);
+
+  // Try GRN first (actual stock receiving), fallback to PurchaseInvoice
+  const { getGRNModel } = await import('../../../models/tenant/franchise/GRN.model.js');
+  const GRN = getGRNModel(req.db);
   const PurchaseInvoice = getPurchaseInvoiceModel(req.db);
 
-  const [invoices, total, kpiAgg] = await Promise.all([
-    PurchaseInvoice.find({ billDate: range, status: { $ne: 'Cancelled' } })
-      .sort({ billDate: -1 }).skip((Number(page)-1)*Number(limit)).limit(Number(limit)).lean(),
-    PurchaseInvoice.countDocuments({ billDate: range }),
-    PurchaseInvoice.aggregate([
-      { $match: { billDate: range } },
-      { $group: { _id: null, totalPurchase: { $sum: '$totalAmt' }, totalDiscount: { $sum: '$discountAmt' }, totalGST: { $sum: '$gstAmt' }, count: { $sum: 1 } } },
-    ]),
-  ]);
+  const skip = (Number(page) - 1) * Number(limit);
 
-  const kpi = kpiAgg[0] || {};
-  return res.status(200).json(new apiResponse(200, {
-    kpi: { totalPurchase: kpi.totalPurchase || 0, totalDiscount: kpi.totalDiscount || 0, totalGST: kpi.totalGST || 0, invoiceCount: kpi.count || 0 },
-    invoices: invoices.map(i => ({
+  // Check which collection has data
+  const grnCount = await GRN.countDocuments({});
+  const piCount  = await PurchaseInvoice.countDocuments({});
+
+  let invoices = [], total = 0, kpi = {};
+
+  if (grnCount > 0) {
+    // Use GRN data
+    const dateFilter = { createdAt: range };
+    const [grns, grnTotal, kpiAgg] = await Promise.all([
+      GRN.find(dateFilter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+      GRN.countDocuments(dateFilter),
+      GRN.aggregate([
+        { $match: dateFilter },
+        { $group: {
+          _id: null,
+          totalPurchase: { $sum: '$totalAmount' },
+          count: { $sum: 1 },
+        }},
+      ]),
+    ]);
+
+    total = grnTotal;
+    kpi = {
+      totalPurchase: kpiAgg[0]?.totalPurchase || 0,
+      totalDiscount: 0,
+      totalGST: 0,
+      invoiceCount: kpiAgg[0]?.count || 0,
+    };
+    invoices = grns.map(g => ({
+      billNo:   g.grnNo,
+      poRef:    g.poRef || '—',
+      date:     new Date(g.createdAt).toLocaleDateString('en-IN'),
+      supplier: g.supplier || '—',
+      items:    g.items?.length || 0,
+      qty:      g.items?.reduce((s, it) => s + (it.grnReceivedQty || it.qty || 0), 0) || 0,
+      gross:    g.totalAmount || 0,
+      discount: 0,
+      tax:      0,
+      net:      g.totalAmount || 0,
+      status:   g.status || 'completed',
+    }));
+  } else if (piCount > 0) {
+    // Fallback to PurchaseInvoice
+    const dateFilter = { billDate: range, status: { $ne: 'Cancelled' } };
+    const [pis, piTotal, kpiAgg] = await Promise.all([
+      PurchaseInvoice.find(dateFilter).sort({ billDate: -1 }).skip(skip).limit(Number(limit)).lean(),
+      PurchaseInvoice.countDocuments({ billDate: range }),
+      PurchaseInvoice.aggregate([
+        { $match: { billDate: range } },
+        { $group: { _id: null, totalPurchase: { $sum: '$totalAmt' }, totalDiscount: { $sum: '$discountAmt' }, totalGST: { $sum: '$gstAmt' }, count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    total = piTotal;
+    kpi = { totalPurchase: kpiAgg[0]?.totalPurchase || 0, totalDiscount: kpiAgg[0]?.totalDiscount || 0, totalGST: kpiAgg[0]?.totalGST || 0, invoiceCount: kpiAgg[0]?.count || 0 };
+    invoices = pis.map(i => ({
       billNo:   i.billNo,
       poRef:    i.poRef || '—',
       date:     new Date(i.billDate).toLocaleDateString('en-IN'),
@@ -100,8 +150,14 @@ export const getPurchaseReport = asyncHandler(async (req, res) => {
       tax:      i.gstAmt || 0,
       net:      i.totalAmt,
       status:   i.status,
-    })),
-    total, totalPages: Math.ceil(total / Number(limit)),
+    }));
+  }
+
+  return res.status(200).json(new apiResponse(200, {
+    kpi,
+    invoices,
+    total,
+    totalPages: Math.ceil(total / Number(limit)),
   }, 'Purchase report fetched'));
 });
 

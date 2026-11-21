@@ -14,7 +14,7 @@ const ReceiptSchema = new mongoose.Schema({
   bankName:     { type: String },
   notes:        { type: String },
   status:       { type: String, enum: ['Received', 'Pending', 'Cancelled', 'Bounced'], default: 'Received' },
-  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise', required: true },
+  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise' },
 }, { timestamps: true });
 
 export const getReceiptModel = (connection) => {

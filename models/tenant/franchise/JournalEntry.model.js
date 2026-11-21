@@ -21,7 +21,7 @@ const JournalEntrySchema = new mongoose.Schema({
   approvedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedDate: { type: Date },
   notes:        { type: String },
-  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise', required: true },
+  franchiseId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Franchise' },
 }, { timestamps: true });
 
 export const getJournalEntryModel = (connection) => {
